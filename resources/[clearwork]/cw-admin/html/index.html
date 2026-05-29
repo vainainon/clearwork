@@ -11,25 +11,29 @@
             <button id="closeBtn" class="close-btn">×</button>
 
             <div class="header">
-                <div class="small">CLEARWORK ADMINISTRATION</div>
-                <h1>Админка</h1>
-                <p id="adminInfo">Загрузка...</p>
+                <div class="small">CLEARWORK ADMIN</div>
+                <h1>Персонажи</h1>
+                <p>Поиск и администрирование персонажей</p>
             </div>
 
-            <div class="tabs">
-                <button data-tab="players">Игроки</button>
-                <button data-tab="admins">Админы</button>
-                <button data-tab="logs">Логи</button>
-                <button id="refreshBtn">Обновить</button>
+            <div class="search-row">
+                <input id="searchInput" placeholder="Имя, фамилия, ник аккаунта, license, discord">
+                <button id="searchBtn">Поиск</button>
             </div>
 
-            <div id="playersTab" class="tab"></div>
-            <div id="adminsTab" class="tab hidden"></div>
-            <div id="logsTab" class="tab hidden"></div>
+            <div id="error"></div>
+            <div id="characterList"></div>
 
-            <div class="hint">
-                Назначение админов пока через консоль/чат:
-                <b>/cw_addadmin [general-admin/admin/helper] [id]</b>
+            <div id="confirmModal" class="modal hidden">
+                <div class="modal-box">
+                    <h2>Удалить персонажа?</h2>
+                    <p id="confirmText"></p>
+
+                    <div class="modal-actions">
+                        <button id="confirmYes">Удалить</button>
+                        <button id="confirmNo">Отмена</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
