@@ -14,6 +14,16 @@ function post(name, data = {}) {
     });
 }
 
+function getAppearanceData() {
+    return {
+        scale: Number(document.getElementById('scale').value),
+        skinTone: Number(document.getElementById('skinTone').value),
+        faceShape: Number(document.getElementById('faceShape').value),
+        hair: document.getElementById('hair').value,
+        beard: document.getElementById('beard').value
+    };
+}
+
 function renderCharacters() {
     characterList.innerHTML = '';
 
@@ -36,11 +46,28 @@ function renderCharacters() {
             <p>Возраст: ${character.age}</p>
             <p>Пол: ${character.gender}</p>
             <p>Наличные: $${character.cash}</p>
-            <button>Войти</button>
+
+            <div class="card-actions">
+                <button class="select-btn">Войти</button>
+                <button class="delete-btn">Удалить</button>
+            </div>
         `;
 
-        card.querySelector('button').addEventListener('click', () => {
+        card.querySelector('.select-btn').addEventListener('click', () => {
             post('selectCharacter', {
+                id: character.id,
+                spawnCity: document.getElementById('spawnCity').value
+            });
+        });
+
+        card.querySelector('.delete-btn').addEventListener('click', () => {
+            const confirmed = confirm(`Удалить персонажа ${character.firstname} ${character.lastname}?`);
+
+            if (!confirmed) {
+                return;
+            }
+
+            post('deleteCharacter', {
                 id: character.id
             });
         });
@@ -57,7 +84,8 @@ document.getElementById('createBtn').addEventListener('click', () => {
         firstname: document.getElementById('firstname').value,
         lastname: document.getElementById('lastname').value,
         age: document.getElementById('age').value,
-        gender: document.getElementById('gender').value
+        gender: document.getElementById('gender').value,
+        skin: getAppearanceData()
     });
 });
 

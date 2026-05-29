@@ -23,8 +23,8 @@ body {
 }
 
 .panel {
-    width: 920px;
-    min-height: 560px;
+    width: 1080px;
+    min-height: 660px;
     background: #d8bd83;
     border: 6px solid #3b210f;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
@@ -55,17 +55,20 @@ body {
 
 .content {
     display: grid;
-    grid-template-columns: 1fr 340px;
+    grid-template-columns: 1fr 390px;
     gap: 28px;
 }
 
-h2 {
+h2,
+h3 {
     margin-top: 0;
     border-bottom: 1px solid #3b210f;
     padding-bottom: 8px;
 }
 
-.character-card {
+.character-card,
+.spawn-block,
+.appearance {
     border: 2px solid #3b210f;
     padding: 16px;
     margin-bottom: 12px;
@@ -81,6 +84,12 @@ h2 {
         margin: 4px 0;
     }
 
+label {
+    display: block;
+    margin: 8px 0 4px;
+    font-weight: bold;
+}
+
 input,
 select,
 button {
@@ -94,6 +103,10 @@ button {
     font-size: 16px;
 }
 
+    input[type="range"] {
+        padding: 0;
+    }
+
 button {
     cursor: pointer;
     background: #3b210f;
@@ -104,6 +117,20 @@ button {
 
     button:hover {
         background: #5a3217;
+    }
+
+.card-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.delete-btn {
+    background: #6b0000;
+}
+
+    .delete-btn:hover {
+        background: #8a0000;
     }
 
 #error {
