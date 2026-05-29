@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>ClearWork Admin</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app" class="hidden">
+        <div class="panel">
+            <button id="closeBtn" class="close-btn">×</button>
+
+            <div class="header">
+                <div class="small">CLEARWORK ADMINISTRATION</div>
+                <h1>Админка</h1>
+                <p id="adminInfo">Загрузка...</p>
+            </div>
+
+            <div class="tabs">
+                <button data-tab="players">Игроки</button>
+                <button data-tab="admins">Админы</button>
+                <button data-tab="logs">Логи</button>
+                <button id="refreshBtn">Обновить</button>
+            </div>
+
+            <div id="playersTab" class="tab"></div>
+            <div id="adminsTab" class="tab hidden"></div>
+            <div id="logsTab" class="tab hidden"></div>
+
+            <div class="hint">
+                Назначение админов пока через консоль/чат:
+                <b>/cw_addadmin [general-admin/admin/helper] [id]</b>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -11,6 +11,8 @@ sets sv_projectDesc "Recipe for the base resources required to run a minimal Red
 sets tags "default, deployer"
 sets locale "root-AQ"
 
+set mysql_connection_string "mysql://root:Insert000!@127.0.0.1:3306/clearwork?charset=utf8mb4"
+
 ## You CAN edit the following:
 set gamename rdr3
 sv_enforceGameBuild 1491 #September 2022 update
@@ -22,15 +24,21 @@ set steam_webApiKey "none"
 set resources_useSystemChat true
 
 ## These resources will start by default.
+ensure [oxmysql]
 ensure mapmanager
 ensure chat
 ensure spawnmanager
 ensure sessionmanager-rdr3
 ensure redm-map-one
 ensure hardcap
+ensure cw-core
+ensure cw-characters
+ensure cw-spawn
 
 ## Add system admins
 add_ace group.admin command allow # allow all commands
 add_ace group.admin command.quit deny # but don't allow quit
 add_principal identifier.fivem:16208961 group.admin #vainainon
 add_principal identifier.discord:1197115080819613718 group.admin #vainainon
+add_ace group.admin clearwork.admin allow
+add_principal identifier.discord:1197115080819613718 group.admin

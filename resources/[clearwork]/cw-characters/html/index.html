@@ -8,40 +8,74 @@
 <body>
     <div id="app" class="hidden">
         <div class="panel">
+            <button id="closeBtn" class="close-btn">×</button>
+
             <div class="header">
                 <div class="small">CLEARWORK ROLEPLAY</div>
-                <h1>Выбор персонажа</h1>
-                <p>Лемойн ждёт новую историю</p>
+                <h1>Лемойн</h1>
+                <p>Новая история начинается здесь</p>
             </div>
 
-            <div class="content">
-                <div class="characters">
-                    <h2>Ваши персонажи</h2>
+            <div id="mainView" class="view">
+                <div class="main-grid">
+                    <div class="info-card">
+                        <h2>Добро пожаловать</h2>
+                        <p>
+                            ClearWork Roleplay — ролевой сервер в штате Лемойн.
+                            Здесь важны персонажи, история, последствия и социальная игра.
+                        </p>
 
-                    <div class="spawn-block">
-                        <h3>Город спавна</h3>
-                        <select id="spawnCity">
+                        <h3>Перед началом</h3>
+                        <p>
+                            Создай персонажа, выбери город первого появления и настрой базовую внешность.
+                            После выбора персонажа он будет появляться на последней сохранённой позиции.
+                        </p>
+                    </div>
+
+                    <div class="menu-card">
+                        <button id="showCharactersBtn">Мои персонажи</button>
+                        <button id="showCreateBtn">Создать персонажа</button>
+                        <button id="showRulesBtn">Правила сервера</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="charactersView" class="view hidden">
+                <div class="view-title">
+                    <h2>Ваши персонажи</h2>
+                    <button class="small-btn" data-view="main">Назад</button>
+                </div>
+
+                <div id="characterList"></div>
+
+                <button id="createFromListBtn">Создать нового персонажа</button>
+            </div>
+
+            <div id="createView" class="view hidden">
+                <div class="view-title">
+                    <h2>Новый персонаж</h2>
+                    <button class="small-btn" data-view="characters">Назад</button>
+                </div>
+
+                <div class="create-grid">
+                    <div class="creator">
+                        <input id="firstname" placeholder="Имя">
+                        <input id="lastname" placeholder="Фамилия">
+                        <input id="age" type="number" min="16" max="90" placeholder="Возраст">
+
+                        <select id="gender">
+                            <option value="male">Мужчина</option>
+                            <option value="female">Женщина</option>
+                        </select>
+
+                        <label>Город первого появления</label>
+                        <select id="startCity">
                             <option value="saintdenis">Saint Denis</option>
                             <option value="rhodes">Rhodes</option>
                             <option value="vanhorn">Van Horn</option>
                             <option value="annesburg">Annesburg</option>
                         </select>
                     </div>
-
-                    <div id="characterList"></div>
-                </div>
-
-                <div class="creator">
-                    <h2>Новый персонаж</h2>
-
-                    <input id="firstname" placeholder="Имя">
-                    <input id="lastname" placeholder="Фамилия">
-                    <input id="age" type="number" min="16" max="90" placeholder="Возраст">
-
-                    <select id="gender">
-                        <option value="male">Мужчина</option>
-                        <option value="female">Женщина</option>
-                    </select>
 
                     <div class="appearance">
                         <h3>Внешность</h3>
@@ -70,12 +104,37 @@
                             <option value="full">Полная борода</option>
                         </select>
                     </div>
+                </div>
 
-                    <button id="createBtn">Создать персонажа</button>
+                <button id="createBtn">Создать персонажа</button>
+            </div>
 
-                    <div id="error"></div>
+            <div id="rulesView" class="view hidden">
+                <div class="view-title">
+                    <h2>Правила сервера</h2>
+                    <button class="small-btn" data-view="main">Назад</button>
+                </div>
+
+                <div class="info-card">
+                    <p>1. Играй персонажа, а не победу.</p>
+                    <p>2. Уважай последствия своих действий.</p>
+                    <p>3. Не используй системные недоработки.</p>
+                    <p>4. Конфликты должны создавать историю, а не ломать игру.</p>
                 </div>
             </div>
+
+            <div id="confirmModal" class="modal hidden">
+                <div class="modal-box">
+                    <h2>Подтверждение</h2>
+                    <p id="confirmText"></p>
+                    <div class="modal-actions">
+                        <button id="confirmYes">Подтвердить</button>
+                        <button id="confirmNo">Отмена</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="error"></div>
         </div>
     </div>
 

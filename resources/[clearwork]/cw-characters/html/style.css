@@ -23,12 +23,30 @@ body {
 }
 
 .panel {
+    position: relative;
     width: 1080px;
     min-height: 660px;
+    max-height: 92vh;
+    overflow-y: auto;
     background: #d8bd83;
     border: 6px solid #3b210f;
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
     padding: 28px;
+}
+
+.close-btn {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    width: 42px;
+    height: 42px;
+    padding: 0;
+    margin: 0;
+    font-size: 32px;
+    line-height: 38px;
+    border: 2px solid #3b210f;
+    background: #6b0000;
+    color: #f1dfaa;
 }
 
 .header {
@@ -53,10 +71,29 @@ body {
         font-style: italic;
     }
 
-.content {
+.view-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.main-grid,
+.create-grid {
     display: grid;
     grid-template-columns: 1fr 390px;
     gap: 28px;
+}
+
+.info-card,
+.menu-card,
+.creator,
+.appearance,
+.character-card {
+    border: 2px solid #3b210f;
+    padding: 16px;
+    margin-bottom: 12px;
+    background: rgba(255, 244, 205, 0.45);
 }
 
 h2,
@@ -66,23 +103,14 @@ h3 {
     padding-bottom: 8px;
 }
 
-.character-card,
-.spawn-block,
-.appearance {
-    border: 2px solid #3b210f;
-    padding: 16px;
-    margin-bottom: 12px;
-    background: rgba(255, 244, 205, 0.45);
+.character-card h3 {
+    margin: 0 0 8px;
+    font-size: 24px;
 }
 
-    .character-card h3 {
-        margin: 0 0 8px;
-        font-size: 24px;
-    }
-
-    .character-card p {
-        margin: 4px 0;
-    }
+.character-card p {
+    margin: 4px 0;
+}
 
 label {
     display: block;
@@ -115,11 +143,21 @@ button {
     letter-spacing: 2px;
 }
 
-    button:hover {
+    button:hover:not(:disabled) {
         background: #5a3217;
     }
 
-.card-actions {
+    button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+
+.small-btn {
+    width: 160px;
+}
+
+.card-actions,
+.modal-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
@@ -129,9 +167,44 @@ button {
     background: #6b0000;
 }
 
-    .delete-btn:hover {
+    .delete-btn:hover:not(:disabled) {
         background: #8a0000;
     }
+
+.cancel-delete-btn {
+    background: #6b4300;
+}
+
+.delete-status {
+    margin: 12px 0;
+    padding: 10px;
+    border: 1px solid #6b0000;
+    background: rgba(107, 0, 0, 0.12);
+    font-weight: bold;
+}
+
+    .delete-status.muted {
+        border-color: #5a3217;
+        background: rgba(90, 50, 23, 0.12);
+        font-weight: normal;
+    }
+
+.modal {
+    position: absolute;
+    inset: 0;
+    background: rgba(12, 7, 3, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-box {
+    width: 520px;
+    border: 4px solid #3b210f;
+    background: #d8bd83;
+    padding: 24px;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+}
 
 #error {
     color: #6b0000;

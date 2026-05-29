@@ -1,6 +1,7 @@
 local characters = {}
 local uiOpen = false
 local characterSelected = false
+local firstOpen = true
 
 local function SetCharacterUI(state)
     uiOpen = state
@@ -9,11 +10,16 @@ local function SetCharacterUI(state)
 
     SendNUIMessage({
         action = state and 'open' or 'close',
-        characters = characters
+        characters = characters,
+        hasSelectedCharacter = characterSelected
     })
 end
 
 local function SaveCurrentPosition()
+    if not characterSelected then
+        return
+    end
+
     local ped = PlayerPedId()
 
     if not DoesEntityExist(ped) then
@@ -46,8 +52,9 @@ end
 
 local function OpenCharacterMenu()
     SaveCurrentPosition()
+
     characterSelected = false
-TriggerServerEvent('cw-characters:server:clearSelectedCharacter')
+    TriggerServerEvent('cw-characters:server:clearSelectedCharacter')
 
     DoScreenFadeOut(300)
     Wait(400)
@@ -78,6 +85,12 @@ end, false)
 RegisterNetEvent('cw-characters:client:receiveCharacters', function(list)
     characters = list or {}
     print('[cw-characters] Characters received: ' .. tostring(#characters))
+
+    if firstOpen then
+        firstOpen = false
+        characterSelected = false
+    end
+
     SetCharacterUI(true)
 end)
 
@@ -86,6 +99,13 @@ RegisterNetEvent('cw-characters:client:createSuccess', function()
 end)
 
 RegisterNetEvent('cw-characters:client:createFailed', function(reason)
+    SendNUIMessage({
+        action = 'error',
+        message = tostring(reason)
+    })
+end)
+
+RegisterNetEvent('cw-characters:client:deleteFailed', function(reason)
     SendNUIMessage({
         action = 'error',
         message = tostring(reason)
@@ -115,11 +135,11 @@ end)
 
 RegisterNUICallback('createCharacter', function(data, cb)
     TriggerServerEvent('cw-characters:server:createCharacter', {
-        slot = tonumber(data.slot) or 1,
         firstname = data.firstname,
         lastname = data.lastname,
         gender = data.gender,
         age = tonumber(data.age) or 18,
+        startCity = data.startCity,
         skin = data.skin or {}
     })
 
@@ -127,21 +147,26 @@ RegisterNUICallback('createCharacter', function(data, cb)
 end)
 
 RegisterNUICallback('selectCharacter', function(data, cb)
-    TriggerServerEvent(
-        'cw-characters:server:selectCharacter',
-        tonumber(data.id),
-        data.spawnCity
-    )
-
+    TriggerServerEvent('cw-characters:server:selectCharacter', tonumber(data.id))
     cb({ ok = true })
 end)
 
-RegisterNUICallback('deleteCharacter', function(data, cb)
-    TriggerServerEvent('cw-characters:server:deleteCharacter', tonumber(data.id))
+RegisterNUICallback('requestDeleteCharacter', function(data, cb)
+    TriggerServerEvent('cw-characters:server:requestDeleteCharacter', tonumber(data.id))
     cb({ ok = true })
 end)
 
-RegisterNUICallback('close', function(_, cb)
+RegisterNUICallback('cancelDeleteCharacter', function(data, cb)
+    TriggerServerEvent('cw-characters:server:cancelDeleteCharacter', tonumber(data.id))
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('closeMenu', function(_, cb)
+    SetCharacterUI(false)
+
+    local ped = PlayerPedId()
+    FreezeEntityPosition(ped, false)
+
     cb({ ok = true })
 end)
 
