@@ -135,6 +135,8 @@ if (closeBtn) {
     });
 }
 
+
+
 if (confirmYes) {
     confirmYes.addEventListener('click', () => {
         if (pendingDeleteId) {
@@ -152,6 +154,12 @@ if (confirmNo) {
         closeConfirm();
     });
 }
+
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        post('closeMenu');
+    }
+});
 
 window.addEventListener('message', (event) => {
     const data = event.data || {};

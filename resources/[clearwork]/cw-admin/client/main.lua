@@ -2,6 +2,7 @@ local uiOpen = false
 
 local function SetAdminUI(state)
     uiOpen = state
+
     SetNuiFocus(state, state)
 
     SendNUIMessage({
@@ -17,6 +18,31 @@ end, false)
 RegisterCommand('adminchars', function()
     ExecuteCommand('cwadmin')
 end, false)
+
+RegisterCommand('closeadmin', function()
+    SetAdminUI(false)
+end, false)
+
+AddEventHandler('onClientResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'close' })
+end)
+
+CreateThread(function()
+    while true do
+        Wait(0)
+
+        if uiOpen then
+            if IsControlJustPressed(0, 0x156F7119) then -- ESC
+                SetAdminUI(false)
+            end
+        else
+            Wait(500)
+        end
+    end
+end)
 
 RegisterNetEvent('cw-admin:client:receiveCharacters', function(characters)
     SendNUIMessage({

@@ -1,173 +1,134 @@
-local RolePower = {
-    helper = 1,
-    admin = 2,
-    ['general-admin'] = 3
-}
-
-local function GetIdentifier(src, prefix)
-    for _, identifier in ipairs(GetPlayerIdentifiers(src)) do
-        if identifier:sub(1, #prefix) == prefix then
-            return identifier
-        end
-    end
-
-    return nil
+local function IsAdmin(src)
+    return IsPlayerAceAllowed(src, 'clearwork.admin')
 end
 
-local function IsOwner(src)
-    return src == 0 or IsPlayerAceAllowed(src, 'clearwork.owner')
+local function SendError(src, message)
+    TriggerClientEvent('cw-admin:client:error', src, message)
 end
 
-local function GetAdminBySource(src)
-    if IsOwner(src) then
-        return {
-            role = 'owner',
-            power = 4,
-            license = 'console/owner',
-            name = src == 0 and 'Console' or GetPlayerName(src)
-        }
-    end
+RegisterNetEvent('cw-admin:server:searchCharacters', function(query)
+    local src = source
 
-    local license = GetIdentifier(src, 'license:')
-    if not license then return nil end
-
-    local admin = MySQL.single.await(
-        'SELECT * FROM admin_users WHERE license = ? LIMIT 1',
-        { license }
-    )
-
-    if not admin then return nil end
-
-    admin.power = RolePower[admin.role] or 0
-    return admin
-end
-
-local function CanAssign(actor, targetRole)
-    if not actor then return false end
-
-    if actor.role == 'owner' then
-        return targetRole == 'general-admin' or targetRole == 'admin' or targetRole == 'helper'
-    end
-
-    if actor.role == 'general-admin' then
-        return targetRole == 'admin' or targetRole == 'helper'
-    end
-
-    return false
-end
-
-local function LogAdminAction(actor, action, targetLicense, targetName, details)
-    MySQL.insert.await([[
-        INSERT INTO admin_logs
-            (actor_license, actor_name, action, target_license, target_name, details)
-        VALUES
-            (?, ?, ?, ?, ?, ?)
-    ]], {
-        actor and actor.license or nil,
-        actor and actor.name or nil,
-        action,
-        targetLicense,
-        targetName,
-        details
-    })
-end
-
-RegisterCommand('cw_addadmin', function(src, args)
-    local actor = GetAdminBySource(src)
-
-    if not actor then
-        print('[cw-admin] Access denied.')
+    if not IsAdmin(src) then
+        print(('[cw-admin] Access denied for %s'):format(src))
+        SendError(src, 'Нет доступа.')
         return
     end
 
-    local role = tostring(args[1] or '')
-    local targetId = tonumber(args[2])
+    query = tostring(query or '')
+    local like = '%' .. query .. '%'
 
-    if not RolePower[role] then
-        print('[cw-admin] Usage: /cw_addadmin [general-admin/admin/helper] [id]')
+    local characters
+
+    if query == '' then
+        characters = MySQL.query.await([[
+            SELECT
+                c.id,
+                c.account_id,
+                c.slot,
+                c.firstname,
+                c.lastname,
+                c.gender,
+                c.age,
+                c.cash,
+                c.bank,
+                c.is_dead,
+                c.created_at,
+                c.delete_requested_at,
+                a.name AS account_name,
+                a.license,
+                a.discord,
+                a.steam
+            FROM characters c
+            LEFT JOIN accounts a ON a.id = c.account_id
+            ORDER BY c.created_at DESC
+            LIMIT 100
+        ]])
+    else
+        characters = MySQL.query.await([[
+            SELECT
+                c.id,
+                c.account_id,
+                c.slot,
+                c.firstname,
+                c.lastname,
+                c.gender,
+                c.age,
+                c.cash,
+                c.bank,
+                c.is_dead,
+                c.created_at,
+                c.delete_requested_at,
+                a.name AS account_name,
+                a.license,
+                a.discord,
+                a.steam
+            FROM characters c
+            LEFT JOIN accounts a ON a.id = c.account_id
+            WHERE
+                c.firstname LIKE ?
+                OR c.lastname LIKE ?
+                OR CONCAT(c.firstname, ' ', c.lastname) LIKE ?
+                OR a.name LIKE ?
+                OR a.license LIKE ?
+                OR a.discord LIKE ?
+                OR a.steam LIKE ?
+            ORDER BY c.created_at DESC
+            LIMIT 100
+        ]], {
+            like,
+            like,
+            like,
+            like,
+            like,
+            like,
+            like
+        })
+    end
+
+    print(('[cw-admin] Search "%s" returned %s characters'):format(query, #(characters or {})))
+
+    TriggerClientEvent('cw-admin:client:receiveCharacters', src, characters or {})
+end)
+
+RegisterNetEvent('cw-admin:server:deleteCharacter', function(characterId)
+    local src = source
+
+    if not IsAdmin(src) then
+        print(('[cw-admin] Delete denied for %s'):format(src))
+        SendError(src, 'Нет доступа.')
         return
     end
 
-    if not targetId or not GetPlayerName(targetId) then
-        print('[cw-admin] Player not found.')
+    characterId = tonumber(characterId)
+    if not characterId then
+        SendError(src, 'Некорректный ID персонажа.')
         return
     end
 
-    if not CanAssign(actor, role) then
-        print('[cw-admin] You cannot assign this role.')
-        return
-    end
+    local character = MySQL.single.await([[
+        SELECT id, firstname, lastname, account_id
+        FROM characters
+        WHERE id = ?
+        LIMIT 1
+    ]], { characterId })
 
-    local license = GetIdentifier(targetId, 'license:')
-    local name = GetPlayerName(targetId)
-
-    if not license then
-        print('[cw-admin] Target license not found.')
+    if not character then
+        SendError(src, 'Персонаж не найден.')
         return
     end
 
     MySQL.update.await([[
-        INSERT INTO admin_users (license, name, role, created_by)
-        VALUES (?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            name = VALUES(name),
-            role = VALUES(role),
-            created_by = VALUES(created_by)
-    ]], {
-        license,
-        name,
-        role,
-        actor.license
-    })
+        DELETE FROM characters
+        WHERE id = ?
+    ]], { characterId })
 
-    LogAdminAction(actor, 'add_admin', license, name, json.encode({
-        role = role
-    }))
+    print(('[cw-admin] Admin %s deleted character %s %s [%s]'):format(
+        GetPlayerName(src),
+        character.firstname,
+        character.lastname,
+        character.id
+    ))
 
-    print(('[cw-admin] %s is now %s'):format(name, role))
-end, false)
-
-RegisterNetEvent('cw-admin:server:open', function()
-    local src = source
-    local admin = GetAdminBySource(src)
-
-    if not admin then
-        print(('[cw-admin] Access denied for %s'):format(src))
-        return
-    end
-
-    local players = {}
-
-    for _, playerId in ipairs(GetPlayers()) do
-        playerId = tonumber(playerId)
-
-        players[#players + 1] = {
-            id = playerId,
-            name = GetPlayerName(playerId),
-            license = GetIdentifier(playerId, 'license:') or 'unknown'
-        }
-    end
-
-    local admins = MySQL.query.await([[
-        SELECT id, license, name, role, created_at
-        FROM admin_users
-        ORDER BY FIELD(role, 'general-admin', 'admin', 'helper'), created_at DESC
-    ]]) or {}
-
-    local logs = MySQL.query.await([[
-        SELECT actor_name, action, target_name, details, created_at
-        FROM admin_logs
-        ORDER BY id DESC
-        LIMIT 30
-    ]]) or {}
-
-    TriggerClientEvent('cw-admin:client:open', src, {
-        self = {
-            name = admin.name,
-            role = admin.role
-        },
-        players = players,
-        admins = admins,
-        logs = logs
-    })
+    TriggerClientEvent('cw-admin:client:deletedCharacter', src, characterId)
 end)

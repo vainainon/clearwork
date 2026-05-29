@@ -16,7 +16,7 @@ body {
 #app {
     width: 100vw;
     height: 100vh;
-    background: rgba(12, 7, 3, 0.72);
+    background: radial-gradient(circle at center, rgba(0,0,0,0.25), rgba(0,0,0,0.85)), rgba(12, 7, 3, 0.72);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -24,13 +24,12 @@ body {
 
 .panel {
     position: relative;
-    width: 1080px;
-    min-height: 660px;
-    max-height: 92vh;
+    width: 1180px;
+    max-height: 88vh;
     overflow-y: auto;
-    background: #d8bd83;
+    background: linear-gradient(180deg, #e3c98f, #c8a968);
     border: 6px solid #3b210f;
-    box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
+    box-shadow: 0 0 0 2px #8b5a24 inset, 0 0 50px rgba(0, 0, 0, 0.95);
     padding: 28px;
 }
 
@@ -43,19 +42,21 @@ body {
     padding: 0;
     margin: 0;
     font-size: 32px;
+    line-height: 34px;
     border: 2px solid #3b210f;
-    background: #6b0000;
+    background: #7c0600;
     color: #f1dfaa;
 }
 
 .header {
     text-align: center;
-    border-bottom: 2px solid #3b210f;
+    border-bottom: 3px double #3b210f;
     margin-bottom: 24px;
+    padding-bottom: 14px;
 }
 
     .header .small {
-        letter-spacing: 5px;
+        letter-spacing: 6px;
         font-size: 12px;
     }
 
@@ -65,48 +66,134 @@ body {
         text-transform: uppercase;
     }
 
-.tabs {
+    .header p {
+        margin: 0;
+        font-style: italic;
+    }
+
+.search-row {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
+    grid-template-columns: 1fr 180px;
+    gap: 12px;
     margin-bottom: 20px;
+}
+
+input,
+button {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #3b210f;
+    background: #f1dfaa;
+    color: #2b1608;
+    font-family: Georgia, serif;
+    font-size: 16px;
 }
 
 button {
     cursor: pointer;
     background: #3b210f;
     color: #f1dfaa;
-    border: 2px solid #3b210f;
-    padding: 12px;
-    font-family: Georgia, serif;
-    font-size: 16px;
     text-transform: uppercase;
     letter-spacing: 2px;
+    font-weight: bold;
 }
 
     button:hover {
         background: #5a3217;
     }
 
-.card {
-    border: 2px solid #3b210f;
-    padding: 16px;
-    margin-bottom: 12px;
-    background: rgba(255, 244, 205, 0.45);
+#characterList {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
 }
 
-    .card h3 {
-        margin: 0 0 8px;
-        font-size: 24px;
-    }
-
-    .card p {
-        margin: 4px 0;
-    }
-
-.hint {
-    margin-top: 18px;
-    padding: 12px;
+.character-card,
+.empty {
     border: 2px solid #3b210f;
-    background: rgba(255, 244, 205, 0.35);
+    padding: 16px;
+    background: rgba(255, 244, 205, 0.55);
+    box-shadow: 0 0 0 1px rgba(59, 33, 15, 0.25) inset;
+}
+
+.char-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.character-card h3 {
+    margin: 0 0 12px;
+    font-size: 24px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 16px;
+    font-size: 14px;
+}
+
+    .grid p {
+        margin: 3px 0;
+        word-break: break-word;
+    }
+
+.status {
+    padding: 6px 10px;
+    border: 1px solid #3b210f;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+    .status.ok {
+        background: rgba(0, 90, 0, 0.18);
+    }
+
+    .status.danger {
+        background: rgba(107, 0, 0, 0.18);
+    }
+
+.delete-btn {
+    margin-top: 14px;
+    background: #6b0000;
+}
+
+    .delete-btn:hover {
+        background: #8a0000;
+    }
+
+.modal {
+    position: absolute;
+    inset: 0;
+    background: rgba(12, 7, 3, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-box {
+    width: 520px;
+    border: 4px solid #3b210f;
+    background: #d8bd83;
+    padding: 24px;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
+}
+
+.modal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+#confirmYes {
+    background: #6b0000;
+}
+
+#error {
+    color: #6b0000;
+    min-height: 24px;
+    font-weight: bold;
+    margin-bottom: 8px;
 }
