@@ -1,4 +1,16 @@
 local characters = {}
+local uiOpen = false
+
+local function SetCharacterUI(state)
+    uiOpen = state
+
+    SetNuiFocus(state, state)
+
+    SendNUIMessage({
+        action = state and 'open' or 'close',
+        characters = characters
+    })
+end
 
 CreateThread(function()
     Wait(5000)
@@ -10,33 +22,25 @@ RegisterNetEvent('cw-characters:client:receiveCharacters', function(list)
 
     print('[cw-characters] Characters received: ' .. tostring(#characters))
 
-    if #characters == 0 then
-        print('[cw-characters] No characters. Creating test character...')
-
-        TriggerServerEvent('cw-characters:server:createCharacter', {
-            slot = 1,
-            firstname = 'John',
-            lastname = 'Marston',
-            gender = 'male',
-            age = 30
-        })
-    else
-        print('[cw-characters] Selecting first character...')
-        TriggerServerEvent('cw-characters:server:selectCharacter', characters[1].id)
-    end
+    SetCharacterUI(true)
 end)
 
-RegisterNetEvent('cw-characters:client:createSuccess', function(characterId)
-    print('[cw-characters] Character created: ' .. tostring(characterId))
+RegisterNetEvent('cw-characters:client:createSuccess', function()
     TriggerServerEvent('cw-characters:server:getCharacters')
 end)
 
 RegisterNetEvent('cw-characters:client:createFailed', function(reason)
-    print('[cw-characters] Create failed: ' .. tostring(reason))
+    SendNUIMessage({
+        action = 'error',
+        message = tostring(reason)
+    })
 end)
 
 RegisterNetEvent('cw-characters:client:selectFailed', function(reason)
-    print('[cw-characters] Select failed: ' .. tostring(reason))
+    SendNUIMessage({
+        action = 'error',
+        message = tostring(reason)
+    })
 end)
 
 RegisterNetEvent('cw-characters:client:characterSelected', function(character)
@@ -44,4 +48,51 @@ RegisterNetEvent('cw-characters:client:characterSelected', function(character)
         character.firstname,
         character.lastname
     ))
+
+    SetCharacterUI(false)
+
+    TriggerEvent('cw-spawn:client:spawnCharacter', character)
+end)
+
+RegisterNUICallback('createCharacter', function(data, cb)
+    TriggerServerEvent('cw-characters:server:createCharacter', {
+        slot = tonumber(data.slot) or 1,
+        firstname = data.firstname,
+        lastname = data.lastname,
+        gender = data.gender,
+        age = tonumber(data.age) or 18
+    })
+
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('selectCharacter', function(data, cb)
+    TriggerServerEvent('cw-characters:server:selectCharacter', tonumber(data.id))
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('close', function(_, cb)
+    cb({ ok = true })
+end)
+
+CreateThread(function()
+    while true do
+        Wait(60000)
+
+        if not uiOpen then
+            local ped = PlayerPedId()
+
+            if DoesEntityExist(ped) then
+                local coords = GetEntityCoords(ped)
+                local heading = GetEntityHeading(ped)
+
+                TriggerServerEvent('cw-core:server:updateCharacterPosition', {
+                    x = coords.x,
+                    y = coords.y,
+                    z = coords.z,
+                    heading = heading
+                })
+            end
+        end
+    end
 end)

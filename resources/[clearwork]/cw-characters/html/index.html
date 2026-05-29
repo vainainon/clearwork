@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>ClearWork Characters</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app" class="hidden">
+        <div class="panel">
+            <div class="header">
+                <div class="small">CLEARWORK ROLEPLAY</div>
+                <h1>Выбор персонажа</h1>
+                <p>Лемойн ждёт новую историю</p>
+            </div>
+
+            <div class="content">
+                <div class="characters">
+                    <h2>Ваши персонажи</h2>
+                    <div id="characterList"></div>
+                </div>
+
+                <div class="creator">
+                    <h2>Новый персонаж</h2>
+
+                    <input id="firstname" placeholder="Имя">
+                    <input id="lastname" placeholder="Фамилия">
+                    <input id="age" type="number" min="16" max="90" placeholder="Возраст">
+
+                    <select id="gender">
+                        <option value="male">Мужчина</option>
+                        <option value="female">Женщина</option>
+                    </select>
+
+                    <button id="createBtn">Создать персонажа</button>
+
+                    <div id="error"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -103,3 +103,34 @@ exports('GetAccountId', function(src)
     local player = CW.Players[src]
     return player and player.account_id or nil
 end)
+
+RegisterNetEvent('cw-core:server:updateCharacterPosition', function(coords)
+    local src = source
+    local player = CW.Players[src]
+
+    if not player or not player.character then
+        return
+    end
+
+    if type(coords) ~= 'table' then
+        return
+    end
+
+    MySQL.update.await([[
+        UPDATE characters
+        SET pos_x = ?, pos_y = ?, pos_z = ?, heading = ?
+        WHERE id = ? AND account_id = ?
+    ]], {
+        coords.x,
+        coords.y,
+        coords.z,
+        coords.heading,
+        player.character.id,
+        player.account_id
+    })
+
+    player.character.pos_x = coords.x
+    player.character.pos_y = coords.y
+    player.character.pos_z = coords.z
+    player.character.heading = coords.heading
+end)

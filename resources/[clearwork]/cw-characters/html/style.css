@@ -1,0 +1,113 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Georgia, serif;
+    background: transparent;
+    color: #2b1608;
+}
+
+.hidden {
+    display: none !important;
+}
+
+#app {
+    width: 100vw;
+    height: 100vh;
+    background: rgba(12, 7, 3, 0.72);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.panel {
+    width: 920px;
+    min-height: 560px;
+    background: #d8bd83;
+    border: 6px solid #3b210f;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.9);
+    padding: 28px;
+}
+
+.header {
+    text-align: center;
+    border-bottom: 2px solid #3b210f;
+    margin-bottom: 24px;
+}
+
+    .header .small {
+        letter-spacing: 5px;
+        font-size: 12px;
+    }
+
+    .header h1 {
+        margin: 8px 0;
+        font-size: 46px;
+        text-transform: uppercase;
+    }
+
+    .header p {
+        margin-top: 0;
+        font-style: italic;
+    }
+
+.content {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 28px;
+}
+
+h2 {
+    margin-top: 0;
+    border-bottom: 1px solid #3b210f;
+    padding-bottom: 8px;
+}
+
+.character-card {
+    border: 2px solid #3b210f;
+    padding: 16px;
+    margin-bottom: 12px;
+    background: rgba(255, 244, 205, 0.45);
+}
+
+    .character-card h3 {
+        margin: 0 0 8px;
+        font-size: 24px;
+    }
+
+    .character-card p {
+        margin: 4px 0;
+    }
+
+input,
+select,
+button {
+    width: 100%;
+    margin-bottom: 12px;
+    padding: 12px;
+    border: 2px solid #3b210f;
+    background: #f1dfaa;
+    color: #2b1608;
+    font-family: Georgia, serif;
+    font-size: 16px;
+}
+
+button {
+    cursor: pointer;
+    background: #3b210f;
+    color: #f1dfaa;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+    button:hover {
+        background: #5a3217;
+    }
+
+#error {
+    color: #6b0000;
+    min-height: 22px;
+    font-weight: bold;
+}

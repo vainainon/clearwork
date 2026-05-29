@@ -5,7 +5,15 @@ rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aw
 
 author 'clearwork'
 description 'ClearWork Characters'
-version '0.1.0'
+version '0.2.0'
+
+ui_page 'html/index.html'
+
+files {
+    'html/index.html',
+    'html/style.css',
+    'html/app.js'
+}
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
