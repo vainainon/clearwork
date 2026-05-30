@@ -1,17 +1,18 @@
 local characters = {}
 local uiOpen = false
 local characterSelected = false
+local currentCharacterId = nil
 local firstOpen = true
 
 local function SetCharacterUI(state)
     uiOpen = state
-
     SetNuiFocus(state, state)
 
     SendNUIMessage({
         action = state and 'open' or 'close',
         characters = characters,
-        hasSelectedCharacter = characterSelected
+        hasSelectedCharacter = characterSelected,
+        currentCharacterId = currentCharacterId
     })
 end
 
@@ -60,11 +61,6 @@ local function OpenCharacterMenu()
     local coords = GetEntityCoords(ped)
     local heading = GetEntityHeading(ped)
 
-    -- ВАЖНО:
-    -- Не сбрасываем characterSelected.
-    -- Если игрок просто открыл /chars, создал нового персонажа,
-    -- но не выбрал его, старый персонаж должен остаться активным.
-
     DoScreenFadeOut(300)
     Wait(400)
 
@@ -99,14 +95,32 @@ RegisterCommand('chars', function()
     ExecuteCommand('changechar')
 end, false)
 
-RegisterNetEvent('cw-characters:client:receiveCharacters', function(list)
+RegisterNetEvent('cw-characters:client:receiveCharacters', function(list, selectedId)
     characters = list or {}
 
     print('[cw-characters] Characters received: ' .. tostring(#characters))
 
+    if selectedId ~= nil then
+        currentCharacterId = tonumber(selectedId)
+    else
+        currentCharacterId = nil
+
+        for _, character in ipairs(characters) do
+            if character.is_current == true or character.is_current == 1 or character.is_current == '1' then
+                currentCharacterId = tonumber(character.id)
+                break
+            end
+        end
+    end
+
+    if currentCharacterId ~= nil then
+        characterSelected = true
+    elseif firstOpen then
+        characterSelected = false
+    end
+
     if firstOpen then
         firstOpen = false
-        characterSelected = false
     end
 
     SetCharacterUI(true)
@@ -144,6 +158,7 @@ RegisterNetEvent('cw-characters:client:characterSelected', function(character)
     ))
 
     characterSelected = true
+    currentCharacterId = tonumber(character.id)
 
     SetCharacterUI(false)
 
@@ -151,7 +166,6 @@ RegisterNetEvent('cw-characters:client:characterSelected', function(character)
     FreezeEntityPosition(ped, false)
 
     ApplyBasicAppearance(character)
-
     TriggerEvent('cw-spawn:client:spawnCharacter', character)
 end)
 
@@ -171,7 +185,17 @@ RegisterNUICallback('createCharacter', function(data, cb)
 end)
 
 RegisterNUICallback('selectCharacter', function(data, cb)
-    TriggerServerEvent('cw-characters:server:selectCharacter', tonumber(data.id))
+    local id = tonumber(data.id)
+
+    if currentCharacterId ~= nil and id == currentCharacterId then
+        cb({
+            ok = false,
+            reason = 'already_selected'
+        })
+        return
+    end
+
+    TriggerServerEvent('cw-characters:server:selectCharacter', id)
 
     cb({
         ok = true

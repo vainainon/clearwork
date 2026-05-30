@@ -17,6 +17,7 @@ const confirmNo = document.getElementById('confirmNo');
 let currentCharacters = [];
 let pendingConfirm = null;
 let hasSelectedCharacter = false;
+let currentCharacterId = null;
 
 function post(name, data = {}) {
     return fetch(`https://${GetParentResourceName()}/${name}`, {
@@ -73,6 +74,10 @@ function getDeleteStatus(character) {
     };
 }
 
+function isCurrentCharacter(character) {
+    return currentCharacterId !== null && Number(character.id) === Number(currentCharacterId);
+}
+
 function renderCharacters() {
     characterList.innerHTML = '';
 
@@ -90,13 +95,20 @@ function renderCharacters() {
         const status = getDeleteStatus(character);
         const ageDays = Number(character.age_days || 0);
         const canRequestDelete = ageDays >= 7 && !status;
+        const isCurrent = isCurrentCharacter(character);
 
         const card = document.createElement('div');
-        card.className = 'character-card';
+        card.className = isCurrent ? 'character-card current-character' : 'character-card';
 
         let statusHtml = '';
 
-        if (status) {
+        if (isCurrent) {
+            statusHtml = `
+                <div class="delete-status selected-status">
+                    Сейчас ты играешь за этого персонажа.
+                </div>
+            `;
+        } else if (status) {
             statusHtml = `
                 <div class="delete-status">
                     Персонаж поставлен на удаление. До удаления примерно: ${status.hoursLeft} ч.
@@ -117,19 +129,25 @@ function renderCharacters() {
             <p>Пол: ${character.gender}</p>
             <p>Наличные: $${character.cash}</p>
             ${statusHtml}
-
             <div class="card-actions">
-                <button class="select-btn" ${status ? 'disabled' : ''}>Войти</button>
+                <button class="select-btn ${isCurrent ? 'selected-btn' : ''}" ${status || isCurrent ? 'disabled' : ''}>
+                    ${isCurrent ? 'Выбран' : 'Войти'}
+                </button>
                 ${status
-                ? '<button class="cancel-delete-btn">Отменить</button>'
-                : '<button class="delete-btn" ' + (!canRequestDelete ? 'disabled' : '') + '>Удалить</button>'
+                ? `<button class="cancel-delete-btn" ${isCurrent ? 'disabled' : ''}>Отменить</button>`
+                : `<button class="delete-btn" ${!canRequestDelete || isCurrent ? 'disabled' : ''}>Удалить</button>`
             }
             </div>
         `;
 
         const selectBtn = card.querySelector('.select-btn');
+
         if (selectBtn) {
             selectBtn.addEventListener('click', () => {
+                if (isCurrent) {
+                    return;
+                }
+
                 post('selectCharacter', {
                     id: character.id
                 });
@@ -137,8 +155,13 @@ function renderCharacters() {
         }
 
         const deleteBtn = card.querySelector('.delete-btn');
+
         if (deleteBtn) {
             deleteBtn.addEventListener('click', () => {
+                if (isCurrent) {
+                    return;
+                }
+
                 openConfirm(
                     `Поставить персонажа ${character.firstname} ${character.lastname} на удаление? Окончательное удаление произойдёт через 12 часов. Отменить можно только в первый час.`,
                     () => {
@@ -151,8 +174,13 @@ function renderCharacters() {
         }
 
         const cancelDeleteBtn = card.querySelector('.cancel-delete-btn');
+
         if (cancelDeleteBtn) {
             cancelDeleteBtn.addEventListener('click', () => {
+                if (isCurrent) {
+                    return;
+                }
+
                 openConfirm(
                     `Отменить удаление персонажа ${character.firstname} ${character.lastname}?`,
                     () => {
@@ -225,7 +253,20 @@ window.addEventListener('message', (event) => {
 
     if (data.action === 'open') {
         currentCharacters = data.characters || [];
-        hasSelectedCharacter = Boolean(data.hasSelectedCharacter);
+
+        currentCharacterId = data.currentCharacterId !== undefined && data.currentCharacterId !== null
+            ? Number(data.currentCharacterId)
+            : null;
+
+        if (currentCharacterId === null) {
+            currentCharacters.forEach((character) => {
+                if (character.is_current === true || character.is_current === 1 || character.is_current === '1') {
+                    currentCharacterId = Number(character.id);
+                }
+            });
+        }
+
+        hasSelectedCharacter = Boolean(data.hasSelectedCharacter || currentCharacterId !== null);
 
         renderCharacters();
         app.classList.remove('hidden');

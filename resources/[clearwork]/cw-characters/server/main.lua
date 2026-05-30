@@ -6,7 +6,6 @@ local SpawnCities = {
         z = 51.42,
         heading = 270.0
     },
-
     rhodes = {
         label = 'Rhodes',
         x = 1230.92,
@@ -14,7 +13,6 @@ local SpawnCities = {
         z = 76.90,
         heading = 140.0
     },
-
     vanhorn = {
         label = 'Van Horn',
         x = 2981.54,
@@ -22,7 +20,6 @@ local SpawnCities = {
         z = 44.63,
         heading = 80.0
     },
-
     annesburg = {
         label = 'Annesburg',
         x = 2932.58,
@@ -76,8 +73,35 @@ local function GetCharacters(accountId)
     }) or {}
 end
 
-local function SendCharacters(src, accountId)
-    TriggerClientEvent('cw-characters:client:receiveCharacters', src, GetCharacters(accountId))
+local function GetCurrentCharacterId(player)
+    if type(player) ~= 'table' or type(player.character) ~= 'table' then
+        return nil
+    end
+
+    return tonumber(player.character.id)
+end
+
+local function SendCharacters(src, playerOrAccountId)
+    local accountId = playerOrAccountId
+    local currentCharacterId = nil
+
+    if type(playerOrAccountId) == 'table' then
+        accountId = playerOrAccountId.account_id
+        currentCharacterId = GetCurrentCharacterId(playerOrAccountId)
+    end
+
+    if not accountId then
+        TriggerClientEvent('cw-characters:client:receiveCharacters', src, {}, nil)
+        return
+    end
+
+    local characters = GetCharacters(accountId)
+
+    for _, character in ipairs(characters) do
+        character.is_current = currentCharacterId ~= nil and tonumber(character.id) == currentCharacterId
+    end
+
+    TriggerClientEvent('cw-characters:client:receiveCharacters', src, characters, currentCharacterId)
 end
 
 local function GetFreeSlot(characters)
@@ -105,11 +129,11 @@ RegisterNetEvent('cw-characters:server:getCharacters', function()
     local player = GetCWPlayer(src)
 
     if not player then
-        TriggerClientEvent('cw-characters:client:receiveCharacters', src, {})
+        TriggerClientEvent('cw-characters:client:receiveCharacters', src, {}, nil)
         return
     end
 
-    SendCharacters(src, player.account_id)
+    SendCharacters(src, player)
 end)
 
 RegisterNetEvent('cw-characters:server:createCharacter', function(data)
@@ -185,7 +209,7 @@ RegisterNetEvent('cw-characters:server:createCharacter', function(data)
         ))
 
         TriggerClientEvent('cw-characters:client:createFailed', src, 'Не удалось создать персонажа. Попробуй ещё раз.')
-        SendCharacters(src, player.account_id)
+        SendCharacters(src, player)
         return
     end
 
@@ -196,7 +220,7 @@ RegisterNetEvent('cw-characters:server:createCharacter', function(data)
     ))
 
     TriggerClientEvent('cw-characters:client:createSuccess', src)
-    SendCharacters(src, player.account_id)
+    SendCharacters(src, player)
 end)
 
 RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(characterId)
@@ -215,6 +239,7 @@ RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(charact
 
     if player.character and tonumber(player.character.id) == characterId then
         TriggerClientEvent('cw-characters:client:deleteFailed', src, 'Нельзя поставить на удаление персонажа, за которого ты сейчас играешь.')
+        SendCharacters(src, player)
         return
     end
 
@@ -265,7 +290,7 @@ RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(charact
         player.account_id
     ))
 
-    SendCharacters(src, player.account_id)
+    SendCharacters(src, player)
 end)
 
 RegisterNetEvent('cw-characters:server:cancelDeleteCharacter', function(characterId)
@@ -321,7 +346,7 @@ RegisterNetEvent('cw-characters:server:cancelDeleteCharacter', function(characte
         player.account_id
     ))
 
-    SendCharacters(src, player.account_id)
+    SendCharacters(src, player)
 end)
 
 RegisterNetEvent('cw-characters:server:selectCharacter', function(characterId)
@@ -335,6 +360,11 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(characterId)
     characterId = tonumber(characterId)
 
     if not characterId then
+        return
+    end
+
+    if player.character and tonumber(player.character.id) == characterId then
+        SendCharacters(src, player)
         return
     end
 
@@ -409,10 +439,5 @@ RegisterNetEvent('cw-characters:server:openCharacterMenu', function(coords)
         ))
     end
 
-    -- ВАЖНО:
-    -- Больше не делаем ClearCharacter при открытии /chars.
-    -- Открытие меню не должно сбрасывать активного персонажа.
-    -- Активный персонаж меняется только через selectCharacter.
-
-    SendCharacters(src, player.account_id)
+    SendCharacters(src, player)
 end)
