@@ -21,6 +21,7 @@
                 <button class="tab-btn" type="button" data-tab="characters">Персонажи</button>
                 <button class="tab-btn" type="button" data-tab="players">Игроки</button>
                 <button class="tab-btn" type="button" data-tab="tools">Инструменты</button>
+                <button class="tab-btn" type="button" data-tab="management">Управление</button>
             </nav>
 
             <div id="notice"></div>
@@ -110,6 +111,47 @@
                         W/S — вперёд/назад, A/D — в стороны, Space — вверх, Shift — быстро, Ctrl — медленно.
                     </div>
                 </section>
+
+                <section id="view-management" class="tab-view">
+                    <div class="section-title">
+                        <h2>Управление</h2>
+                        <p>Выдача прав и список администраторов</p>
+                    </div>
+
+                    <div class="management-form">
+                        <div>
+                            <label for="managementPlayer">Онлайн-игрок</label>
+                            <select id="managementPlayer">
+                                <option value="">Выбрать онлайн-игрока</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="managementIdentifier">Identifier</label>
+                            <input id="managementIdentifier" type="text" placeholder="license:xxxx или выбери игрока выше">
+                        </div>
+
+                        <div>
+                            <label for="managementName">Имя / заметка</label>
+                            <input id="managementName" type="text" placeholder="Имя администратора">
+                        </div>
+
+                        <div>
+                            <label for="managementRole">Роль</label>
+                            <select id="managementRole"></select>
+                        </div>
+
+                        <button id="managementSetRoleBtn" type="button">Выдать / изменить роль</button>
+                        <button id="managementRefreshBtn" type="button">Обновить</button>
+                    </div>
+
+                    <div class="hint-box">
+                        <b>Важно:</b> Owner не хранится в БД и задаётся только через server.cfg.
+                        Через меню можно выдавать только General Admin, Admin и Helper.
+                    </div>
+
+                    <div id="adminList" class="admin-list"></div>
+                </section>
             </main>
 
             <div id="confirmModal" class="modal hidden">
@@ -123,9 +165,24 @@
                     </div>
                 </div>
             </div>
+
+            <div id="actionModal" class="modal hidden">
+                <div class="modal-box">
+                    <h2 id="actionModalTitle">Действие</h2>
+                    <p id="actionModalText"></p>
+
+                    <label class="modal-label" for="actionReason">Причина</label>
+                    <textarea id="actionReason" class="modal-textarea" placeholder="Укажи причину"></textarea>
+
+                    <div class="modal-actions">
+                        <button id="actionConfirm" type="button">Подтвердить</button>
+                        <button id="actionCancel" type="button">Отмена</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <script src="app.js?v=5" charset="UTF-8"></script>
+    <script src="app.js?v=13" charset="UTF-8"></script>
 </body>
 </html>

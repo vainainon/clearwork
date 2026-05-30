@@ -73,7 +73,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
     width: 100%;
     padding: 12px;
     border: 2px solid #3b210f;
@@ -103,7 +104,7 @@ button {
 
 .tabs {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 10px;
     margin-bottom: 18px;
 }
@@ -198,7 +199,8 @@ button {
 }
 
 .character-list,
-.player-list {
+.player-list,
+.admin-list {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 14px;
@@ -206,6 +208,7 @@ button {
 
 .character-card,
 .player-card,
+.admin-card,
 .empty {
     border: 2px solid #3b210f;
     padding: 16px;
@@ -221,7 +224,8 @@ button {
 }
 
 .character-card h3,
-.player-card h3 {
+.player-card h3,
+.admin-card h3 {
     margin: 0 0 12px;
     font-size: 24px;
 }
@@ -348,6 +352,40 @@ button {
     #actionConfirm:hover {
         background: #8a0000;
     }
+
+.management-form {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr 1fr 1fr;
+    gap: 10px;
+    align-items: end;
+    margin-bottom: 16px;
+}
+
+    .management-form label {
+        display: block;
+        font-weight: bold;
+        margin-bottom: 6px;
+    }
+
+    .management-form button {
+        min-height: 48px;
+    }
+
+.admin-list {
+    margin-top: 16px;
+}
+
+.admin-actions {
+    margin-top: 14px;
+}
+
+    .admin-actions button {
+        background: #6b0000;
+    }
+
+        .admin-actions button:hover {
+            background: #8a0000;
+        }
 
 .role-owner {
     color: #7c0600;

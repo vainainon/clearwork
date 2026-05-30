@@ -21,6 +21,14 @@ var characterList = $('characterList');
 var refreshPlayersBtn = $('refreshPlayersBtn');
 var playerList = $('playerList');
 
+var managementPlayer = $('managementPlayer');
+var managementIdentifier = $('managementIdentifier');
+var managementName = $('managementName');
+var managementRole = $('managementRole');
+var managementSetRoleBtn = $('managementSetRoleBtn');
+var managementRefreshBtn = $('managementRefreshBtn');
+var adminList = $('adminList');
+
 var modal = $('confirmModal');
 var confirmText = $('confirmText');
 var confirmYes = $('confirmYes');
@@ -35,6 +43,7 @@ var actionCancel = $('actionCancel');
 
 var pendingDeleteId = null;
 var pendingPlayerAction = null;
+var canUseManagement = false;
 
 var LAST_TAB_KEY = 'cw-admin:last-tab';
 
@@ -55,13 +64,20 @@ var RU = {
     status: '\u0421\u0442\u0430\u0442\u0443\u0441',
     playersNotFound: '\u041e\u043d\u043b\u0430\u0439\u043d-\u0438\u0433\u0440\u043e\u043a\u0438 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b.',
     character: '\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436',
+    rights: '\u041f\u0440\u0430\u0432\u0430',
     kickPlayer: 'Kick \u0438\u0433\u0440\u043e\u043a\u0430',
     banPlayer: 'Ban \u0438\u0433\u0440\u043e\u043a\u0430',
     playerAction: '\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0441 \u0438\u0433\u0440\u043e\u043a\u043e\u043c',
     characterId: '\u041f\u0435\u0440\u0441\u043e\u043d\u0430\u0436 ID ',
     deleted: ' \u0443\u0434\u0430\u043b\u0451\u043d.',
     error: '\u041e\u0448\u0438\u0431\u043a\u0430.',
-    done: '\u0413\u043e\u0442\u043e\u0432\u043e.'
+    done: '\u0413\u043e\u0442\u043e\u0432\u043e.',
+    noManagementAccess: '\u041d\u0435\u0442 \u0434\u043e\u0441\u0442\u0443\u043f\u0430 \u043a \u0443\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044e.',
+    chooseOnlinePlayer: '\u0412\u044b\u0431\u0440\u0430\u0442\u044c \u043e\u043d\u043b\u0430\u0439\u043d-\u0438\u0433\u0440\u043e\u043a\u0430',
+    adminsNotFound: '\u0410\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u044b \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d\u044b.',
+    role: '\u0420\u043e\u043b\u044c',
+    grantedBy: '\u0412\u044b\u0434\u0430\u043b',
+    removeRights: '\u0421\u043d\u044f\u0442\u044c \u043f\u0440\u0430\u0432\u0430'
 };
 
 var State = {
@@ -74,6 +90,11 @@ var State = {
         invisible: false,
         showCoords: false,
         showIds: false
+    },
+    management: {
+        admins: [],
+        onlinePlayers: [],
+        grantableRoles: []
     }
 };
 
@@ -135,9 +156,46 @@ function setNotice(message, type) {
     notice.className = type || '';
 }
 
+function getRoleClass(role) {
+    if (role === 'owner') {
+        return 'role-owner';
+    }
+
+    if (role === 'general') {
+        return 'role-general';
+    }
+
+    if (role === 'admin') {
+        return 'role-admin';
+    }
+
+    if (role === 'helper') {
+        return 'role-helper';
+    }
+
+    return 'role-user';
+}
+
+function updateManagementTabVisibility(admin) {
+    admin = admin || {};
+
+    canUseManagement = admin.role === 'owner' || admin.role === 'general';
+
+    Array.prototype.forEach.call(tabButtons, function (button) {
+        if (button.dataset.tab === 'management') {
+            button.classList.toggle('hidden', !canUseManagement);
+        }
+    });
+}
+
 function setActiveTab(tab, save) {
     if (!tab) {
         tab = 'dashboard';
+    }
+
+    if (tab === 'management' && !canUseManagement) {
+        tab = 'dashboard';
+        setNotice(RU.noManagementAccess, 'error');
     }
 
     if (save !== false) {
@@ -154,7 +212,9 @@ function setActiveTab(tab, save) {
         view.classList.toggle('active', view.id === 'view-' + tab);
     });
 
-    setNotice('');
+    if (tab !== 'dashboard') {
+        setNotice('');
+    }
 
     if (tab === 'dashboard') {
         post('dashboardLoad');
@@ -167,6 +227,10 @@ function setActiveTab(tab, save) {
     if (tab === 'players') {
         loadPlayers();
     }
+
+    if (tab === 'management') {
+        loadManagement();
+    }
 }
 
 function renderDashboard(payload) {
@@ -174,6 +238,8 @@ function renderDashboard(payload) {
 
     var admin = payload.admin || {};
     var stats = payload.stats || {};
+
+    updateManagementTabVisibility(admin);
 
     if (dashboardAdmin) {
         dashboardAdmin.textContent = admin.name || '-';
@@ -390,17 +456,7 @@ function renderPlayers(players) {
         var coords = getCoords(player);
 
         var roleLabel = player.role_label || 'User';
-        var roleClass = 'role-user';
-
-        if (player.role === 'owner') {
-            roleClass = 'role-owner';
-        } else if (player.role === 'general') {
-            roleClass = 'role-general';
-        } else if (player.role === 'admin') {
-            roleClass = 'role-admin';
-        } else if (player.role === 'helper') {
-            roleClass = 'role-helper';
-        }
+        var roleClass = getRoleClass(player.role);
 
         var card = document.createElement('div');
         card.className = 'player-card';
@@ -420,7 +476,7 @@ function renderPlayers(players) {
             '<p><b>' + RU.character + ':</b> ' + escapeHtml(characterName) + '</p>' +
             '<p><b>Ping:</b> ' + escapeHtml(player.ping) + '</p>' +
 
-            '<p><b>\u041f\u0440\u0430\u0432\u0430:</b> <span class="' + roleClass + '">' + escapeHtml(roleLabel) + '</span></p>' +
+            '<p><b>' + RU.rights + ':</b> <span class="' + roleClass + '">' + escapeHtml(roleLabel) + '</span></p>' +
             '<p><b>Identifier:</b> ' + escapeHtml(player.role_identifier || '-') + '</p>' +
 
             '<p><b>X:</b> ' + coords.x.toFixed(2) + '</p>' +
@@ -460,6 +516,106 @@ function renderPlayers(players) {
     });
 }
 
+function renderManagement(payload) {
+    payload = payload || {};
+
+    State.management = {
+        admins: payload.admins || [],
+        onlinePlayers: payload.onlinePlayers || [],
+        grantableRoles: payload.grantableRoles || []
+    };
+
+    if (managementPlayer) {
+        managementPlayer.innerHTML = '<option value="">' + RU.chooseOnlinePlayer + '</option>';
+
+        State.management.onlinePlayers.forEach(function (player) {
+            var label = '[' + player.source + '] ' + player.name + ' | ' + (player.role_label || 'User');
+
+            var option = document.createElement('option');
+            option.value = String(player.source);
+            option.textContent = label;
+            option.dataset.identifier = player.role_identifier || '';
+            option.dataset.name = player.name || '';
+
+            managementPlayer.appendChild(option);
+        });
+    }
+
+    if (managementRole) {
+        managementRole.innerHTML = '';
+
+        State.management.grantableRoles.forEach(function (role) {
+            var option = document.createElement('option');
+            option.value = role.role;
+            option.textContent = role.label;
+
+            managementRole.appendChild(option);
+        });
+    }
+
+    if (!adminList) {
+        return;
+    }
+
+    adminList.innerHTML = '';
+
+    if (!State.management.admins.length) {
+        adminList.innerHTML = '<div class="empty">' + RU.adminsNotFound + '</div>';
+        return;
+    }
+
+    State.management.admins.forEach(function (admin) {
+        var roleClass = getRoleClass(admin.role);
+
+        var onlineText = admin.online
+            ? 'Online' + (admin.source ? ' | ID: ' + admin.source : '')
+            : 'Offline';
+
+        var card = document.createElement('div');
+        card.className = 'admin-card';
+
+        card.innerHTML =
+            '<div class="card-main">' +
+            '<h3>' + escapeHtml(admin.name || admin.online_name || admin.identifier || '-') + '</h3>' +
+            '<span class="status ' + (admin.online ? 'ok' : '') + '">' + escapeHtml(onlineText) + '</span>' +
+            '</div>' +
+
+            '<div class="grid">' +
+            '<p><b>' + RU.role + ':</b> <span class="' + roleClass + '">' + escapeHtml(admin.role_label || admin.role) + '</span></p>' +
+            '<p><b>Source:</b> ' + escapeHtml(admin.source || '-') + '</p>' +
+
+            '<p><b>Identifier:</b> ' + escapeHtml(admin.identifier || '-') + '</p>' +
+            '<p><b>' + RU.grantedBy + ':</b> ' + escapeHtml(admin.added_by_name || '-') + '</p>' +
+
+            '<p><b>Created:</b> ' + escapeHtml(admin.created_at || '-') + '</p>' +
+            '<p><b>Updated:</b> ' + escapeHtml(admin.updated_at || '-') + '</p>' +
+            '</div>';
+
+        if (admin.can_remove) {
+            card.innerHTML +=
+                '<div class="admin-actions">' +
+                '<button type="button" data-remove-admin="' + escapeHtml(admin.identifier) + '">' +
+                RU.removeRights +
+                '</button>' +
+                '</div>';
+        }
+
+        var removeBtn = card.querySelector('[data-remove-admin]');
+
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function () {
+                post('managementRemoveRole', {
+                    identifier: removeBtn.dataset.removeAdmin
+                });
+
+                setTimeout(loadManagement, 500);
+            });
+        }
+
+        adminList.appendChild(card);
+    });
+}
+
 function searchCharacters() {
     setNotice('');
 
@@ -471,6 +627,11 @@ function searchCharacters() {
 function loadPlayers() {
     setNotice('');
     post('playersList');
+}
+
+function loadManagement() {
+    setNotice('');
+    post('managementLoad');
 }
 
 if (closeBtn) {
@@ -493,6 +654,41 @@ if (searchInput) {
 
 if (refreshPlayersBtn) {
     refreshPlayersBtn.addEventListener('click', loadPlayers);
+}
+
+if (managementPlayer) {
+    managementPlayer.addEventListener('change', function () {
+        var selected = managementPlayer.options[managementPlayer.selectedIndex];
+
+        if (!selected || !selected.value) {
+            return;
+        }
+
+        if (managementIdentifier) {
+            managementIdentifier.value = selected.dataset.identifier || '';
+        }
+
+        if (managementName) {
+            managementName.value = selected.dataset.name || '';
+        }
+    });
+}
+
+if (managementSetRoleBtn) {
+    managementSetRoleBtn.addEventListener('click', function () {
+        post('managementSetRole', {
+            source: managementPlayer && managementPlayer.value ? Number(managementPlayer.value) : null,
+            identifier: managementIdentifier ? managementIdentifier.value : '',
+            name: managementName ? managementName.value : '',
+            role: managementRole ? managementRole.value : ''
+        });
+
+        setTimeout(loadManagement, 500);
+    });
+}
+
+if (managementRefreshBtn) {
+    managementRefreshBtn.addEventListener('click', loadManagement);
 }
 
 if (confirmYes) {
@@ -599,6 +795,11 @@ window.addEventListener('message', function (event) {
         renderDashboard(data.payload || {});
 
         var savedTab = localStorage.getItem(LAST_TAB_KEY) || State.activeTab || 'dashboard';
+
+        if (savedTab === 'management' && !canUseManagement) {
+            savedTab = 'dashboard';
+        }
+
         setActiveTab(savedTab, false);
         return;
     }
@@ -620,6 +821,11 @@ window.addEventListener('message', function (event) {
 
     if (data.action === 'players:set') {
         renderPlayers(data.players || []);
+        return;
+    }
+
+    if (data.action === 'management:set') {
+        renderManagement(data.payload || {});
         return;
     }
 

@@ -70,6 +70,13 @@ RegisterNetEvent('cw-admin:client:players:receive', function(players)
     })
 end)
 
+RegisterNetEvent('cw-admin:client:management:receive', function(data)
+    SendNUIMessage({
+        action = 'management:set',
+        payload = data or {}
+    })
+end)
+
 RegisterNetEvent('cw-admin:client:error', function(message)
     message = tostring(message or 'Ошибка.')
 
@@ -148,6 +155,30 @@ end)
 
 RegisterNUICallback('toolsToggle', function(data, cb)
     TriggerServerEvent('cw-admin:server:tools:toggle', data.tool)
+
+    cb({
+        ok = true
+    })
+end)
+
+RegisterNUICallback('managementLoad', function(_, cb)
+    TriggerServerEvent('cw-admin:server:management:list')
+
+    cb({
+        ok = true
+    })
+end)
+
+RegisterNUICallback('managementSetRole', function(data, cb)
+    TriggerServerEvent('cw-admin:server:management:setRole', data or {})
+
+    cb({
+        ok = true
+    })
+end)
+
+RegisterNUICallback('managementRemoveRole', function(data, cb)
+    TriggerServerEvent('cw-admin:server:management:removeRole', data or {})
 
     cb({
         ok = true
