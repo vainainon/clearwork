@@ -51,20 +51,23 @@ local function ApplyBasicAppearance(character)
 end
 
 local function OpenCharacterMenu()
-    SaveCurrentPosition()
-
-    Wait(300)
+    local ped = PlayerPedId()
+    local coords = GetEntityCoords(ped)
+    local heading = GetEntityHeading(ped)
 
     characterSelected = false
-    TriggerServerEvent('cw-characters:server:clearSelectedCharacter')
 
     DoScreenFadeOut(300)
     Wait(400)
 
-    local ped = PlayerPedId()
     FreezeEntityPosition(ped, true)
 
-    TriggerServerEvent('cw-characters:server:getCharacters')
+    TriggerServerEvent('cw-characters:server:openCharacterMenu', {
+        x = coords.x,
+        y = coords.y,
+        z = coords.z,
+        heading = heading
+    })
 
     Wait(300)
     DoScreenFadeIn(500)

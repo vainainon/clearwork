@@ -296,3 +296,36 @@ RegisterNetEvent('cw-characters:server:clearSelectedCharacter', function()
 
     print(('[cw-characters] Cleared selected character for %s'):format(player.name))
 end)
+
+RegisterNetEvent('cw-characters:server:openCharacterMenu', function(coords)
+    local src = source
+    local player = GetCWPlayer(src)
+
+    if not player then return end
+
+    if player.character and type(coords) == 'table' then
+        MySQL.update.await([[
+            UPDATE characters
+            SET pos_x = ?, pos_y = ?, pos_z = ?, heading = ?
+            WHERE id = ? AND account_id = ?
+        ]], {
+            coords.x,
+            coords.y,
+            coords.z,
+            coords.heading,
+            player.character.id,
+            player.account_id
+        })
+
+        print(('[cw-characters] Saved position before character switch: %s %.2f %.2f %.2f'):format(
+            player.character.id,
+            coords.x,
+            coords.y,
+            coords.z
+        ))
+    end
+
+    player.character = nil
+
+    SendCharacters(src, player.account_id)
+end)
