@@ -574,6 +574,22 @@ function renderManagement(payload) {
         var card = document.createElement('div');
         card.className = 'admin-card';
 
+        if (admin.role === 'owner') {
+            card.innerHTML =
+                '<div class="card-main">' +
+                '<h3>' + escapeHtml(admin.name || admin.online_name || 'Owner') + '</h3>' +
+                '<span class="status ok">' + escapeHtml(onlineText) + '</span>' +
+                '</div>' +
+
+                '<div class="grid">' +
+                '<p><b>' + RU.role + ':</b> <span class="' + roleClass + '">Owner</span></p>' +
+                '<p></p>' +
+                '</div>';
+
+            adminList.appendChild(card);
+            return;
+        }
+
         card.innerHTML =
             '<div class="card-main">' +
             '<h3>' + escapeHtml(admin.name || admin.online_name || admin.identifier || '-') + '</h3>' +
@@ -676,11 +692,37 @@ if (managementPlayer) {
 
 if (managementSetRoleBtn) {
     managementSetRoleBtn.addEventListener('click', function () {
+        var source = managementPlayer && managementPlayer.value
+            ? Number(managementPlayer.value)
+            : null;
+
+        var identifier = managementIdentifier
+            ? managementIdentifier.value.trim()
+            : '';
+
+        var name = managementName
+            ? managementName.value.trim()
+            : '';
+
+        var role = managementRole
+            ? managementRole.value
+            : '';
+
+        if (!source && !identifier) {
+            setNotice('Выбери онлайн-игрока или укажи identifier.', 'error');
+            return;
+        }
+
+        if (!role) {
+            setNotice('Выбери роль.', 'error');
+            return;
+        }
+
         post('managementSetRole', {
-            source: managementPlayer && managementPlayer.value ? Number(managementPlayer.value) : null,
-            identifier: managementIdentifier ? managementIdentifier.value : '',
-            name: managementName ? managementName.value : '',
-            role: managementRole ? managementRole.value : ''
+            source: source,
+            identifier: identifier,
+            name: name,
+            role: role
         });
 
         setTimeout(loadManagement, 500);

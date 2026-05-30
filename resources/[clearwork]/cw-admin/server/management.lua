@@ -1,9 +1,69 @@
 local Config = CWAdminConfig
 
+local function Trim(value)
+    return tostring(value or ''):gsub('^%s+', ''):gsub('%s+$', '')
+end
+
 local function CanUseManagement(src)
     local role = CWAdmin.GetAdminRole(src)
 
     return role == 'owner' or role == 'general'
+end
+
+local function GetPlayerIdentifierList(src)
+    local identifiers = {}
+
+    for _, identifier in ipairs(GetPlayerIdentifiers(src)) do
+        identifiers[#identifiers + 1] = identifier
+    end
+
+    return identifiers
+end
+
+local function IdentifierEquals(a, b)
+    return tostring(a or ''):lower() == tostring(b or ''):lower()
+end
+
+local function PlayerHasIdentifier(src, identifier)
+    identifier = tostring(identifier or '')
+
+    if identifier == '' then
+        return false
+    end
+
+    for _, playerIdentifier in ipairs(GetPlayerIdentifierList(src)) do
+        if IdentifierEquals(playerIdentifier, identifier) then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function IsOnlineOwnerIdentifier(identifier)
+    identifier = tostring(identifier or '')
+
+    if identifier == '' then
+        return false
+    end
+
+    for _, playerId in ipairs(GetPlayers()) do
+        local targetSrc = tonumber(playerId)
+
+        if targetSrc and CWAdmin.GetAdminRole(targetSrc) == 'owner' then
+            if PlayerHasIdentifier(targetSrc, identifier) then
+                return true
+            end
+
+            local roleData = CWAdmin.GetRoleData(targetSrc)
+
+            if roleData and IdentifierEquals(roleData.identifier, identifier) then
+                return true
+            end
+        end
+    end
+
+    return false
 end
 
 local function GetOnlineOwners()
@@ -73,6 +133,23 @@ local function GetGrantableRoles(src)
     return result
 end
 
+local function GetManagementOnlinePlayers()
+    local players = CWAdmin.GetOnlinePlayers()
+    local result = {}
+
+    for _, player in ipairs(players or {}) do
+        local role = player.role or CWAdmin.GetAdminRole(player.source)
+
+        -- Owner не должен отображаться в списке выдачи прав.
+        -- Owner задаётся только через server.cfg.
+        if role ~= 'owner' then
+            result[#result + 1] = player
+        end
+    end
+
+    return result
+end
+
 local function BuildManagementData(src)
     local owners = GetOnlineOwners()
     local admins = DecorateAdminRows(src, CWAdmin.GetAllAdmins())
@@ -101,7 +178,7 @@ local function BuildManagementData(src)
         actor = CWAdmin.GetRoleData(src),
         grantableRoles = GetGrantableRoles(src),
         admins = list,
-        onlinePlayers = CWAdmin.GetOnlinePlayers()
+        onlinePlayers = GetManagementOnlinePlayers()
     }
 end
 
@@ -126,31 +203,42 @@ RegisterNetEvent('cw-admin:server:management:setRole', function(data)
 
     data = data or {}
 
-    local identifier = tostring(data.identifier or '')
-    local role = tostring(data.role or '')
-    local name = tostring(data.name or identifier)
+    local target = tonumber(data.source)
+    local identifier = Trim(data.identifier)
+    local role = Trim(data.role)
+    local name = Trim(data.name)
 
-    if identifier == '' and data.source then
-        local target = tonumber(data.source)
+    if role == '' then
+        CWAdmin.SendError(src, 'Не выбрана роль.')
+        return
+    end
 
-        if target and GetPlayerName(target) then
-            local targetRole = CWAdmin.GetAdminRole(target)
+    if target and GetPlayerName(target) then
+        local targetRole = CWAdmin.GetAdminRole(target, true)
 
-            if targetRole == 'owner' then
-                CWAdmin.SendError(src, 'Нельзя менять роль Owner. Owner задаётся только в server.cfg.')
-                return
-            end
-
-            local roleData = CWAdmin.GetRoleData(target, true)
-
-            identifier = roleData.identifier or ''
-            name = GetPlayerName(target) or name
+        if targetRole == 'owner' then
+            CWAdmin.SendError(src, 'Нельзя менять роль Owner. Owner задаётся только в server.cfg.')
+            return
         end
+
+        local roleData = CWAdmin.GetRoleData(target, true)
+
+        identifier = roleData.identifier or identifier
+        name = GetPlayerName(target) or name
     end
 
     if identifier == '' then
         CWAdmin.SendError(src, 'Не выбран игрок или identifier.')
         return
+    end
+
+    if IsOnlineOwnerIdentifier(identifier) then
+        CWAdmin.SendError(src, 'Нельзя выдавать БД-роль Owner-у. Owner задаётся только в server.cfg.')
+        return
+    end
+
+    if name == '' then
+        name = identifier
     end
 
     local ok, message = CWAdmin.SetAdminRole(src, identifier, role, name)
@@ -173,7 +261,7 @@ RegisterNetEvent('cw-admin:server:management:removeRole', function(data)
 
     data = data or {}
 
-    local identifier = tostring(data.identifier or '')
+    local identifier = Trim(data.identifier)
 
     if identifier == '' then
         CWAdmin.SendError(src, 'Пустой identifier.')

@@ -1,6 +1,8 @@
 local Config = CWAdminConfig
 
 CWAdmin.RoleCache = CWAdmin.RoleCache or {}
+CWAdmin.AdminUserColumns = CWAdmin.AdminUserColumns or {}
+CWAdmin.AdminUsersReady = false
 
 local function NormalizeRole(role)
     role = tostring(role or 'user'):lower()
@@ -30,6 +32,78 @@ local function GetRoleInfo(role)
     role = NormalizeRole(role)
 
     return Config.Roles[role] or Config.Roles.user
+end
+
+local function SafeQuery(query, params)
+    local ok, result = pcall(function()
+        return MySQL.query.await(query, params or {})
+    end)
+
+    if not ok then
+        print(('[cw-admin] SQL migration/query failed: %s'):format(tostring(result)))
+        return nil
+    end
+
+    return result
+end
+
+local function SafeUpdate(query, params)
+    local ok, result = pcall(function()
+        return MySQL.update.await(query, params or {})
+    end)
+
+    if not ok then
+        print(('[cw-admin] SQL update failed: %s'):format(tostring(result)))
+        return nil
+    end
+
+    return result
+end
+
+local function SafeSingle(query, params)
+    local ok, result = pcall(function()
+        return MySQL.single.await(query, params or {})
+    end)
+
+    if not ok then
+        print(('[cw-admin] SQL single failed: %s'):format(tostring(result)))
+        return nil
+    end
+
+    return result
+end
+
+local function RefreshAdminUserColumns()
+    CWAdmin.AdminUserColumns = {}
+
+    local columns = SafeQuery('SHOW COLUMNS FROM admin_users')
+
+    for _, column in ipairs(columns or {}) do
+        if column.Field then
+            CWAdmin.AdminUserColumns[column.Field] = true
+        end
+    end
+
+    return CWAdmin.AdminUserColumns
+end
+
+local function HasColumn(name)
+    return CWAdmin.AdminUserColumns and CWAdmin.AdminUserColumns[name] == true
+end
+
+local function HasIndex(indexName)
+    local rows = SafeQuery(('SHOW INDEX FROM admin_users WHERE Key_name = %q'):format(indexName))
+
+    return rows and #rows > 0
+end
+
+local function AddColumnIfMissing(name, definition)
+    if HasColumn(name) then
+        return
+    end
+
+    SafeQuery(('ALTER TABLE admin_users ADD COLUMN %s %s'):format(name, definition))
+    RefreshAdminUserColumns()
 end
 
 local function GetIdentifiers(src)
@@ -74,8 +148,48 @@ local function BuildInQuery(values)
     return table.concat(placeholders, ', ')
 end
 
+local function BuildIdentifierWhere(identifiers)
+    local where = {}
+    local params = {}
+
+    if HasColumn('identifier') then
+        where[#where + 1] = ('identifier IN (%s)'):format(BuildInQuery(identifiers))
+
+        for _, identifier in ipairs(identifiers) do
+            params[#params + 1] = identifier
+        end
+    end
+
+    -- Поддержка старой версии таблицы, если раньше была колонка license
+    if HasColumn('license') then
+        where[#where + 1] = ('license IN (%s)'):format(BuildInQuery(identifiers))
+
+        for _, identifier in ipairs(identifiers) do
+            params[#params + 1] = identifier
+        end
+    end
+
+    if #where <= 0 then
+        return '1 = 0', {}
+    end
+
+    return '(' .. table.concat(where, ' OR ') .. ')', params
+end
+
+local function GetRowIdentifier(row)
+    if not row then
+        return nil
+    end
+
+    return row.identifier or row.license
+end
+
 function CWAdmin.EnsureAdminUsersTable()
-    MySQL.query.await([[
+    if CWAdmin.AdminUsersReady then
+        return true
+    end
+
+    SafeQuery([[
         CREATE TABLE IF NOT EXISTS admin_users (
             id INT NOT NULL AUTO_INCREMENT,
             identifier VARCHAR(80) NOT NULL,
@@ -92,7 +206,79 @@ function CWAdmin.EnsureAdminUsersTable()
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ]])
 
-    print('[cw-admin] admin_users table checked')
+    RefreshAdminUserColumns()
+
+    -- Миграция старой таблицы admin_users, если она уже была создана раньше.
+    AddColumnIfMissing('identifier', 'VARCHAR(80) NULL')
+    AddColumnIfMissing('role', "VARCHAR(32) NOT NULL DEFAULT 'helper'")
+    AddColumnIfMissing('name', 'VARCHAR(64) DEFAULT NULL')
+    AddColumnIfMissing('added_by_identifier', 'VARCHAR(80) DEFAULT NULL')
+    AddColumnIfMissing('added_by_name', 'VARCHAR(64) DEFAULT NULL')
+    AddColumnIfMissing('created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    AddColumnIfMissing('updated_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP')
+
+    RefreshAdminUserColumns()
+
+    -- Если старая таблица была на license, переносим license -> identifier.
+    if HasColumn('license') and HasColumn('identifier') then
+        SafeUpdate([[
+            UPDATE admin_users
+            SET identifier = license
+            WHERE
+                (identifier IS NULL OR identifier = '')
+                AND license IS NOT NULL
+                AND license <> ''
+        ]])
+    end
+
+    -- Если раньше был created_by, аккуратно переносим его в added_by_name.
+    if HasColumn('created_by') and HasColumn('added_by_name') then
+        SafeUpdate([[
+            UPDATE admin_users
+            SET added_by_name = created_by
+            WHERE
+                (added_by_name IS NULL OR added_by_name = '')
+                AND created_by IS NOT NULL
+                AND created_by <> ''
+        ]])
+    end
+
+    -- Удаляем мусорные строки без identifier, иначе UNIQUE / NOT NULL может мешать.
+    if HasColumn('identifier') then
+        SafeUpdate([[
+            DELETE FROM admin_users
+            WHERE identifier IS NULL OR identifier = ''
+        ]])
+
+        SafeQuery([[
+            ALTER TABLE admin_users
+            MODIFY COLUMN identifier VARCHAR(80) NOT NULL
+        ]])
+    end
+
+    RefreshAdminUserColumns()
+
+    if HasColumn('identifier') and not HasIndex('uniq_identifier') then
+        SafeQuery([[
+            ALTER TABLE admin_users
+            ADD UNIQUE KEY uniq_identifier (identifier)
+        ]])
+    end
+
+    if HasColumn('role') and not HasIndex('idx_role') then
+        SafeQuery([[
+            ALTER TABLE admin_users
+            ADD KEY idx_role (role)
+        ]])
+    end
+
+    RefreshAdminUserColumns()
+
+    CWAdmin.AdminUsersReady = true
+
+    print('[cw-admin] admin_users table checked / migrated')
+
+    return true
 end
 
 function CWAdmin.RoleHasPermission(role, permission)
@@ -116,6 +302,8 @@ function CWAdmin.GetRoleLabel(role)
 end
 
 function CWAdmin.GetAdminRole(src, refresh)
+    CWAdmin.EnsureAdminUsersTable()
+
     if src == 0 then
         return 'owner'
     end
@@ -141,8 +329,8 @@ function CWAdmin.GetAdminRole(src, refresh)
         return 'user'
     end
 
-    local query = ('SELECT * FROM admin_users WHERE identifier IN (%s) LIMIT 1'):format(BuildInQuery(identifiers))
-    local row = MySQL.single.await(query, identifiers)
+    local where, params = BuildIdentifierWhere(identifiers)
+    local row = SafeSingle(('SELECT * FROM admin_users WHERE %s LIMIT 1'):format(where), params)
 
     local role = 'user'
     local identifier = GetPrimaryIdentifier(src)
@@ -154,7 +342,7 @@ function CWAdmin.GetAdminRole(src, refresh)
 
         if IsDatabaseRole(normalized) then
             role = normalized
-            identifier = row.identifier
+            identifier = GetRowIdentifier(row) or identifier
             name = row.name or name
             dbId = row.id
         end
@@ -186,6 +374,8 @@ function CWAdmin.GetRoleData(src, refresh)
 end
 
 function CWAdmin.GetRoleDataByIdentifiers(identifiers)
+    CWAdmin.EnsureAdminUsersTable()
+
     identifiers = identifiers or {}
 
     if #identifiers <= 0 then
@@ -197,8 +387,8 @@ function CWAdmin.GetRoleDataByIdentifiers(identifiers)
         }
     end
 
-    local query = ('SELECT * FROM admin_users WHERE identifier IN (%s) LIMIT 1'):format(BuildInQuery(identifiers))
-    local row = MySQL.single.await(query, identifiers)
+    local where, params = BuildIdentifierWhere(identifiers)
+    local row = SafeSingle(('SELECT * FROM admin_users WHERE %s LIMIT 1'):format(where), params)
 
     if not row then
         return {
@@ -219,7 +409,7 @@ function CWAdmin.GetRoleDataByIdentifiers(identifiers)
         role = role,
         label = CWAdmin.GetRoleLabel(role),
         level = CWAdmin.GetRoleLevel(role),
-        identifier = row.identifier,
+        identifier = GetRowIdentifier(row),
         name = row.name,
         db_id = row.id
     }
@@ -259,6 +449,8 @@ function CWAdmin.CanRemoveRole(src, targetRole)
 end
 
 function CWAdmin.SetAdminRole(src, identifier, role, name)
+    CWAdmin.EnsureAdminUsersTable()
+
     identifier = tostring(identifier or '')
     role = NormalizeRole(role)
     name = tostring(name or identifier)
@@ -278,23 +470,52 @@ function CWAdmin.SetAdminRole(src, identifier, role, name)
     local actorIdentifier = src == 0 and 'console' or GetPrimaryIdentifier(src)
     local actorName = src == 0 and 'console' or (GetPlayerName(src) or 'unknown')
 
-    MySQL.insert.await([[
-        INSERT INTO admin_users
-            (identifier, role, name, added_by_identifier, added_by_name)
-        VALUES
-            (?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            role = VALUES(role),
-            name = VALUES(name),
-            added_by_identifier = VALUES(added_by_identifier),
-            added_by_name = VALUES(added_by_name)
-    ]], {
-        identifier,
-        role,
-        name,
-        actorIdentifier,
-        actorName
-    })
+    local ok, err = pcall(function()
+        if HasColumn('license') then
+            MySQL.insert.await([[
+                INSERT INTO admin_users
+                    (identifier, license, role, name, added_by_identifier, added_by_name)
+                VALUES
+                    (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    identifier = VALUES(identifier),
+                    role = VALUES(role),
+                    name = VALUES(name),
+                    added_by_identifier = VALUES(added_by_identifier),
+                    added_by_name = VALUES(added_by_name)
+            ]], {
+                identifier,
+                identifier,
+                role,
+                name,
+                actorIdentifier,
+                actorName
+            })
+        else
+            MySQL.insert.await([[
+                INSERT INTO admin_users
+                    (identifier, role, name, added_by_identifier, added_by_name)
+                VALUES
+                    (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    role = VALUES(role),
+                    name = VALUES(name),
+                    added_by_identifier = VALUES(added_by_identifier),
+                    added_by_name = VALUES(added_by_name)
+            ]], {
+                identifier,
+                role,
+                name,
+                actorIdentifier,
+                actorName
+            })
+        end
+    end)
+
+    if not ok then
+        print(('[cw-admin] SetAdminRole failed: %s'):format(tostring(err)))
+        return false, 'Не удалось выдать роль. Проверь структуру admin_users.'
+    end
 
     CWAdmin.AdminLog(src, 'role_set', {
         identifier = identifier,
@@ -312,20 +533,36 @@ function CWAdmin.SetAdminRole(src, identifier, role, name)
 end
 
 function CWAdmin.RemoveAdminRole(src, identifier)
+    CWAdmin.EnsureAdminUsersTable()
+
     identifier = tostring(identifier or '')
 
     if identifier == '' then
         return false, 'Пустой identifier.'
     end
 
-    local row = MySQL.single.await([[
-        SELECT *
-        FROM admin_users
-        WHERE identifier = ?
-        LIMIT 1
-    ]], {
-        identifier
-    })
+    local row
+
+    if HasColumn('license') then
+        row = SafeSingle([[
+            SELECT *
+            FROM admin_users
+            WHERE identifier = ? OR license = ?
+            LIMIT 1
+        ]], {
+            identifier,
+            identifier
+        })
+    else
+        row = SafeSingle([[
+            SELECT *
+            FROM admin_users
+            WHERE identifier = ?
+            LIMIT 1
+        ]], {
+            identifier
+        })
+    end
 
     if not row then
         return false, 'Администратор не найден в БД.'
@@ -337,12 +574,22 @@ function CWAdmin.RemoveAdminRole(src, identifier)
         return false, 'Нет доступа к снятию этой роли.'
     end
 
-    MySQL.update.await([[
-        DELETE FROM admin_users
-        WHERE identifier = ?
-    ]], {
-        identifier
-    })
+    if HasColumn('license') then
+        SafeUpdate([[
+            DELETE FROM admin_users
+            WHERE identifier = ? OR license = ?
+        ]], {
+            identifier,
+            identifier
+        })
+    else
+        SafeUpdate([[
+            DELETE FROM admin_users
+            WHERE identifier = ?
+        ]], {
+            identifier
+        })
+    end
 
     CWAdmin.AdminLog(src, 'role_remove', {
         identifier = identifier,
@@ -359,16 +606,10 @@ function CWAdmin.RemoveAdminRole(src, identifier)
 end
 
 function CWAdmin.GetAllAdmins()
-    local rows = MySQL.query.await([[
-        SELECT
-            id,
-            identifier,
-            role,
-            name,
-            added_by_identifier,
-            added_by_name,
-            created_at,
-            updated_at
+    CWAdmin.EnsureAdminUsersTable()
+
+    local rows = SafeQuery([[
+        SELECT *
         FROM admin_users
     ]]) or {}
 
@@ -390,14 +631,15 @@ function CWAdmin.GetAllAdmins()
 
     for _, row in ipairs(rows) do
         local role = NormalizeRole(row.role)
+        local identifier = GetRowIdentifier(row)
 
-        if IsDatabaseRole(role) then
+        if IsDatabaseRole(role) and identifier then
             local roleInfo = GetRoleInfo(role)
-            local online = onlineByIdentifier[row.identifier]
+            local online = onlineByIdentifier[identifier]
 
             admins[#admins + 1] = {
                 id = row.id,
-                identifier = row.identifier,
+                identifier = identifier,
                 role = role,
                 role_label = roleInfo.label,
                 role_level = roleInfo.level,
