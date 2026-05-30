@@ -1,35 +1,8 @@
 local SpawnCities = {
-    saintdenis = {
-        label = 'Saint Denis',
-        x = 2632.52,
-        y = -1312.31,
-        z = 51.42,
-        heading = 270.0
-    },
-
-    rhodes = {
-        label = 'Rhodes',
-        x = 1230.92,
-        y = -1298.34,
-        z = 76.90,
-        heading = 140.0
-    },
-
-    vanhorn = {
-        label = 'Van Horn',
-        x = 2981.54,
-        y = 570.16,
-        z = 44.63,
-        heading = 80.0
-    },
-
-    annesburg = {
-        label = 'Annesburg',
-        x = 2932.58,
-        y = 1350.25,
-        z = 44.64,
-        heading = 250.0
-    }
+    saintdenis = { label = 'Saint Denis', x = 2632.52, y = -1312.31, z = 51.42, heading = 270.0 },
+    rhodes = { label = 'Rhodes', x = 1230.92, y = -1298.34, z = 76.90, heading = 140.0 },
+    vanhorn = { label = 'Van Horn', x = 2981.54, y = 570.16, z = 44.63, heading = 80.0 },
+    annesburg = { label = 'Annesburg', x = 2932.58, y = 1350.25, z = 44.64, heading = 250.0 }
 }
 
 local function GetCWPlayer(src)
@@ -275,12 +248,15 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(characterId)
         return
     end
 
-    player.character = character
+    exports['cw-core']:SetCharacter(src, character)
 
-    print(('[cw-characters] Selected character %s %s for %s'):format(
+    print(('[cw-characters] Selected character %s %s for %s at %.2f %.2f %.2f'):format(
         character.firstname,
         character.lastname,
-        player.name
+        player.name,
+        tonumber(character.pos_x) or 0.0,
+        tonumber(character.pos_y) or 0.0,
+        tonumber(character.pos_z) or 0.0
     ))
 
     TriggerClientEvent('cw-characters:client:characterSelected', src, character)
@@ -292,7 +268,7 @@ RegisterNetEvent('cw-characters:server:clearSelectedCharacter', function()
 
     if not player then return end
 
-    player.character = nil
+    exports['cw-core']:ClearCharacter(src)
 
     print(('[cw-characters] Cleared selected character for %s'):format(player.name))
 end)
@@ -304,28 +280,17 @@ RegisterNetEvent('cw-characters:server:openCharacterMenu', function(coords)
     if not player then return end
 
     if player.character and type(coords) == 'table' then
-        MySQL.update.await([[
-            UPDATE characters
-            SET pos_x = ?, pos_y = ?, pos_z = ?, heading = ?
-            WHERE id = ? AND account_id = ?
-        ]], {
-            coords.x,
-            coords.y,
-            coords.z,
-            coords.heading,
-            player.character.id,
-            player.account_id
-        })
+        exports['cw-core']:SaveCharacterPosition(src, coords)
 
         print(('[cw-characters] Saved position before character switch: %s %.2f %.2f %.2f'):format(
             player.character.id,
-            coords.x,
-            coords.y,
-            coords.z
+            tonumber(coords.x) or 0.0,
+            tonumber(coords.y) or 0.0,
+            tonumber(coords.z) or 0.0
         ))
     end
 
-    player.character = nil
+    exports['cw-core']:ClearCharacter(src)
 
     SendCharacters(src, player.account_id)
 end)

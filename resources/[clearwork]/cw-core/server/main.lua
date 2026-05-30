@@ -77,6 +77,57 @@ local function LoadOrCreateAccount(src)
     return CW.Players[src]
 end
 
+local function SaveCharacterPosition(src, coords)
+    local player = CW.Players[src]
+
+    if not player or not player.character then
+        print(('[cw-core] Cannot save position, no selected character for source %s'):format(src))
+        return false
+    end
+
+    if type(coords) ~= 'table' then
+        return false
+    end
+
+    local x = tonumber(coords.x)
+    local y = tonumber(coords.y)
+    local z = tonumber(coords.z)
+    local heading = tonumber(coords.heading)
+
+    if not x or not y or not z then
+        return false
+    end
+
+    heading = heading or 0.0
+
+    MySQL.update.await([[
+        UPDATE characters
+        SET pos_x = ?, pos_y = ?, pos_z = ?, heading = ?
+        WHERE id = ? AND account_id = ?
+    ]], {
+        x,
+        y,
+        z,
+        heading,
+        player.character.id,
+        player.account_id
+    })
+
+    player.character.pos_x = x
+    player.character.pos_y = y
+    player.character.pos_z = z
+    player.character.heading = heading
+
+    print(('[cw-core] Saved position for character %s: %.2f %.2f %.2f'):format(
+        player.character.id,
+        x,
+        y,
+        z
+    ))
+
+    return true
+end
+
 AddEventHandler('playerJoining', function()
     local src = source
 
@@ -95,6 +146,14 @@ AddEventHandler('playerDropped', function(reason)
     end
 end)
 
+RegisterNetEvent('cw-core:server:updateCharacterPosition', function(coords)
+    SaveCharacterPosition(source, coords)
+end)
+
+RegisterNetEvent('cw-core:server:saveCurrentPosition', function(coords)
+    SaveCharacterPosition(source, coords)
+end)
+
 exports('GetPlayer', function(src)
     return CW.Players[src]
 end)
@@ -104,73 +163,24 @@ exports('GetAccountId', function(src)
     return player and player.account_id or nil
 end)
 
-RegisterNetEvent('cw-core:server:updateCharacterPosition', function(coords)
-    local src = source
-    local player = CW.Players[src]
-
-    if not player or not player.character then
-        return
+exports('SetCharacter', function(src, character)
+    if not CW.Players[src] then
+        return false
     end
 
-    if type(coords) ~= 'table' then
-        return
-    end
-
-    MySQL.update.await([[
-        UPDATE characters
-        SET pos_x = ?, pos_y = ?, pos_z = ?, heading = ?
-        WHERE id = ? AND account_id = ?
-    ]], {
-        coords.x,
-        coords.y,
-        coords.z,
-        coords.heading,
-        player.character.id,
-        player.account_id
-    })
-
-    player.character.pos_x = coords.x
-    player.character.pos_y = coords.y
-    player.character.pos_z = coords.z
-    player.character.heading = coords.heading
+    CW.Players[src].character = character
+    return true
 end)
 
-RegisterNetEvent('cw-core:server:saveCurrentPosition', function(coords)
-    local src = source
-    local player = CW.Players[src]
-
-    if not player or not player.character then
-        print(('[cw-core] Cannot save position, no selected character for source %s'):format(src))
-        return
+exports('ClearCharacter', function(src)
+    if not CW.Players[src] then
+        return false
     end
 
-    if type(coords) ~= 'table' then return end
+    CW.Players[src].character = nil
+    return true
+end)
 
-    local characterId = player.character.id
-    local accountId = player.account_id
-
-    MySQL.update.await([[
-        UPDATE characters
-        SET pos_x = ?, pos_y = ?, pos_z = ?, heading = ?
-        WHERE id = ? AND account_id = ?
-    ]], {
-        coords.x,
-        coords.y,
-        coords.z,
-        coords.heading,
-        characterId,
-        accountId
-    })
-
-    player.character.pos_x = coords.x
-    player.character.pos_y = coords.y
-    player.character.pos_z = coords.z
-    player.character.heading = coords.heading
-
-    print(('[cw-core] Saved position for character %s: %.2f %.2f %.2f'):format(
-        characterId,
-        coords.x,
-        coords.y,
-        coords.z
-    ))
+exports('SaveCharacterPosition', function(src, coords)
+    return SaveCharacterPosition(src, coords)
 end)
