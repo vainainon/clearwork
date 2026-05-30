@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>ClearWork Admin</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app" class="hidden">
+        <div class="panel">
+            <button id="closeBtn" class="close-btn" type="button">×</button>
+
+            <header class="header">
+                <div class="small">CLEARWORK ADMIN</div>
+                <h1>Админ-панель</h1>
+                <p>Управление сервером, игроками и персонажами</p>
+            </header>
+
+            <nav class="tabs">
+                <button class="tab-btn active" type="button" data-tab="dashboard">Главная</button>
+                <button class="tab-btn" type="button" data-tab="characters">Персонажи</button>
+                <button class="tab-btn" type="button" data-tab="players">Игроки</button>
+                <button class="tab-btn" type="button" data-tab="tools">Инструменты</button>
+            </nav>
+
+            <div id="notice"></div>
+
+            <main class="content">
+                <section id="view-dashboard" class="tab-view active">
+                    <div class="section-title">
+                        <h2>Главная</h2>
+                        <p>Быстрый статус сервера и админских режимов</p>
+                    </div>
+
+                    <div class="dashboard-grid">
+                        <div class="stat-card">
+                            <span>Админ</span>
+                            <strong id="dashboardAdmin">-</strong>
+                        </div>
+
+                        <div class="stat-card">
+                            <span>Онлайн игроков</span>
+                            <strong id="dashboardOnline">0</strong>
+                        </div>
+
+                        <div class="stat-card">
+                            <span>Активных персонажей</span>
+                            <strong id="dashboardActiveCharacters">0</strong>
+                        </div>
+
+                        <div class="stat-card">
+                            <span>Всего персонажей</span>
+                            <strong id="dashboardTotalCharacters">0</strong>
+                        </div>
+                    </div>
+
+                    <div class="quick-tools">
+                        <button type="button" data-tool="noclip">Noclip: OFF</button>
+                        <button type="button" data-tool="godmode">Godmode: OFF</button>
+                        <button type="button" data-tool="invisible">Invisible: OFF</button>
+                        <button type="button" data-tool="showCoords">Coords: OFF</button>
+                        <button type="button" data-tool="showIds">Player IDs: OFF</button>
+                    </div>
+                </section>
+
+                <section id="view-characters" class="tab-view">
+                    <div class="section-title">
+                        <h2>Персонажи</h2>
+                        <p>Поиск и администрирование персонажей</p>
+                    </div>
+
+                    <div class="search-row">
+                        <input id="searchInput" type="text" placeholder="Имя, фамилия, ник аккаунта, license, discord">
+                        <button id="searchBtn" type="button">Поиск</button>
+                    </div>
+
+                    <div id="characterList" class="character-list"></div>
+                </section>
+
+                <section id="view-players" class="tab-view">
+                    <div class="section-title">
+                        <h2>Игроки</h2>
+                        <p>Онлайн-игроки и быстрые действия</p>
+                    </div>
+
+                    <div class="section-actions">
+                        <button id="refreshPlayersBtn" type="button">Обновить список</button>
+                    </div>
+
+                    <div id="playerList" class="player-list"></div>
+                </section>
+
+                <section id="view-tools" class="tab-view">
+                    <div class="section-title">
+                        <h2>Инструменты</h2>
+                        <p>Личные админские режимы</p>
+                    </div>
+
+                    <div class="tools-grid">
+                        <button type="button" data-tool="noclip">Noclip: OFF</button>
+                        <button type="button" data-tool="godmode">Godmode: OFF</button>
+                        <button type="button" data-tool="invisible">Invisible: OFF</button>
+                        <button type="button" data-tool="showCoords">Coords: OFF</button>
+                        <button type="button" data-tool="showIds">Player IDs: OFF</button>
+                    </div>
+
+                    <div class="hint-box">
+                        <b>Noclip управление:</b>
+                        <br>
+                        W/S — вперёд/назад, A/D — в стороны, Space — вверх, Shift — быстро, Ctrl — медленно.
+                    </div>
+                </section>
+            </main>
+
+            <div id="confirmModal" class="modal hidden">
+                <div class="modal-box">
+                    <h2>Удалить персонажа?</h2>
+                    <p id="confirmText"></p>
+
+                    <div class="modal-actions">
+                        <button id="confirmYes" type="button">Удалить</button>
+                        <button id="confirmNo" type="button">Отмена</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

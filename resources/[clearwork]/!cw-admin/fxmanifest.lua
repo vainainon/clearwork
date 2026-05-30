@@ -5,7 +5,7 @@ rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aw
 
 author 'clearwork'
 description 'ClearWork Admin System'
-version '0.2.0'
+version '0.1.0'
 
 ui_page 'html/index.html'
 
@@ -17,18 +17,9 @@ files {
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
-
-    'server/config.lua',
-    'server/core.lua',
-    'server/characters.lua',
-    'server/players.lua',
-    'server/tools.lua',
     'server/main.lua'
 }
 
 client_scripts {
-    'client/tools.lua',
     'client/main.lua'
 }
-
-dependency 'oxmysql'

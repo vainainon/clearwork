@@ -6,35 +6,20 @@ local function SetAdminUI(state)
     SetNuiFocus(state, state)
 
     SendNUIMessage({
-        action = state and 'open' or 'close'
+        action = state and 'ui:open' or 'ui:close'
     })
 end
 
-local function NotifyError(message)
-    message = tostring(message or 'Ошибка.')
-
-    print(('[cw-admin] %s'):format(message))
-
+local function Notify(message, color)
     TriggerEvent('chat:addMessage', {
-        color = { 255, 80, 80 },
+        color = color or { 220, 220, 220 },
         multiline = true,
-        args = { 'cw-admin', message }
+        args = { 'cw-admin', tostring(message or '') }
     })
-
-    if uiOpen then
-        SendNUIMessage({
-            action = 'error',
-            message = message
-        })
-    end
 end
 
 RegisterCommand('cwadmin', function()
-    -- ВАЖНО:
-    -- Больше не открываем NUI сразу.
-    -- Сначала сервер проверяет доступ.
-    -- Если доступ есть, сервер вернет cw-admin:client:receiveCharacters.
-    TriggerServerEvent('cw-admin:server:searchCharacters', '')
+    TriggerServerEvent('cw-admin:server:openPanel')
 end, false)
 
 RegisterCommand('adminchars', function()
@@ -45,15 +30,127 @@ RegisterCommand('closeadmin', function()
     SetAdminUI(false)
 end, false)
 
-AddEventHandler('onClientResourceStop', function(resourceName)
-    if resourceName ~= GetCurrentResourceName() then
-        return
-    end
-
-    SetNuiFocus(false, false)
+RegisterNetEvent('cw-admin:client:openPanel', function(data)
+    SetAdminUI(true)
 
     SendNUIMessage({
-        action = 'close'
+        action = 'panel:open',
+        payload = data or {}
+    })
+end)
+
+RegisterNetEvent('cw-admin:client:dashboard:receive', function(data)
+    SendNUIMessage({
+        action = 'dashboard:set',
+        payload = data or {}
+    })
+end)
+
+RegisterNetEvent('cw-admin:client:characters:receive', function(characters)
+    SendNUIMessage({
+        action = 'characters:set',
+        characters = characters or {}
+    })
+end)
+
+RegisterNetEvent('cw-admin:client:characters:deleted', function(characterId)
+    SendNUIMessage({
+        action = 'characters:deleted',
+        id = characterId
+    })
+
+    TriggerServerEvent('cw-admin:server:characters:search', '')
+    TriggerServerEvent('cw-admin:server:dashboard:load')
+end)
+
+RegisterNetEvent('cw-admin:client:players:receive', function(players)
+    SendNUIMessage({
+        action = 'players:set',
+        players = players or {}
+    })
+end)
+
+RegisterNetEvent('cw-admin:client:error', function(message)
+    message = tostring(message or 'Ошибка.')
+
+    print(('[cw-admin] %s'):format(message))
+    Notify(message, { 255, 80, 80 })
+
+    SendNUIMessage({
+        action = 'error',
+        message = message
+    })
+end)
+
+RegisterNetEvent('cw-admin:client:success', function(message)
+    message = tostring(message or 'Готово.')
+
+    Notify(message, { 80, 255, 120 })
+
+    SendNUIMessage({
+        action = 'success',
+        message = message
+    })
+end)
+
+RegisterNUICallback('closeMenu', function(_, cb)
+    SetAdminUI(false)
+
+    cb({
+        ok = true
+    })
+end)
+
+RegisterNUICallback('dashboardLoad', function(_, cb)
+    TriggerServerEvent('cw-admin:server:dashboard:load')
+
+    cb({
+        ok = true
+    })
+end)
+
+RegisterNUICallback('charactersSearch', function(data, cb)
+    TriggerServerEvent('cw-admin:server:characters:search', data.query or '')
+
+    cb({
+        ok = true
+    })
+end)
+
+RegisterNUICallback('charactersDelete', function(data, cb)
+    TriggerServerEvent('cw-admin:server:characters:delete', tonumber(data.id))
+
+    cb({
+        ok = true
+    })
+end)
+
+RegisterNUICallback('playersList', function(_, cb)
+    TriggerServerEvent('cw-admin:server:players:list')
+
+    cb({
+        ok = true
+    })
+end)
+
+RegisterNUICallback('playersAction', function(data, cb)
+    TriggerServerEvent(
+        'cw-admin:server:players:action',
+        data.action,
+        tonumber(data.target),
+        data.payload or {}
+    )
+
+    cb({
+        ok = true
+    })
+end)
+
+RegisterNUICallback('toolsToggle', function(data, cb)
+    TriggerServerEvent('cw-admin:server:tools:toggle', data.tool)
+
+    cb({
+        ok = true
     })
 end)
 
@@ -62,7 +159,6 @@ CreateThread(function()
         if uiOpen then
             Wait(0)
 
-            -- ESC
             if IsControlJustPressed(0, 0x156F7119) then
                 SetAdminUI(false)
             end
@@ -72,49 +168,14 @@ CreateThread(function()
     end
 end)
 
-RegisterNetEvent('cw-admin:client:receiveCharacters', function(characters)
-    -- Открываем окно только после успешной проверки доступа на сервере.
-    SetAdminUI(true)
+AddEventHandler('onClientResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then
+        return
+    end
+
+    SetNuiFocus(false, false)
 
     SendNUIMessage({
-        action = 'characters',
-        characters = characters or {}
-    })
-end)
-
-RegisterNetEvent('cw-admin:client:deletedCharacter', function(characterId)
-    SendNUIMessage({
-        action = 'deleted',
-        id = characterId
-    })
-
-    TriggerServerEvent('cw-admin:server:searchCharacters', '')
-end)
-
-RegisterNetEvent('cw-admin:client:error', function(message)
-    NotifyError(message)
-end)
-
-RegisterNUICallback('searchCharacters', function(data, cb)
-    TriggerServerEvent('cw-admin:server:searchCharacters', data.query or '')
-
-    cb({
-        ok = true
-    })
-end)
-
-RegisterNUICallback('deleteCharacter', function(data, cb)
-    TriggerServerEvent('cw-admin:server:deleteCharacter', tonumber(data.id))
-
-    cb({
-        ok = true
-    })
-end)
-
-RegisterNUICallback('closeMenu', function(_, cb)
-    SetAdminUI(false)
-
-    cb({
-        ok = true
+        action = 'ui:close'
     })
 end)
