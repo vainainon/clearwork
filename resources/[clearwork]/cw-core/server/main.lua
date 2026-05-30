@@ -134,3 +134,43 @@ RegisterNetEvent('cw-core:server:updateCharacterPosition', function(coords)
     player.character.pos_z = coords.z
     player.character.heading = coords.heading
 end)
+
+RegisterNetEvent('cw-core:server:saveCurrentPosition', function(coords)
+    local src = source
+    local player = CW.Players[src]
+
+    if not player or not player.character then
+        print(('[cw-core] Cannot save position, no selected character for source %s'):format(src))
+        return
+    end
+
+    if type(coords) ~= 'table' then return end
+
+    local characterId = player.character.id
+    local accountId = player.account_id
+
+    MySQL.update.await([[
+        UPDATE characters
+        SET pos_x = ?, pos_y = ?, pos_z = ?, heading = ?
+        WHERE id = ? AND account_id = ?
+    ]], {
+        coords.x,
+        coords.y,
+        coords.z,
+        coords.heading,
+        characterId,
+        accountId
+    })
+
+    player.character.pos_x = coords.x
+    player.character.pos_y = coords.y
+    player.character.pos_z = coords.z
+    player.character.heading = coords.heading
+
+    print(('[cw-core] Saved position for character %s: %.2f %.2f %.2f'):format(
+        characterId,
+        coords.x,
+        coords.y,
+        coords.z
+    ))
+end)

@@ -29,7 +29,7 @@ local function SaveCurrentPosition()
     local coords = GetEntityCoords(ped)
     local heading = GetEntityHeading(ped)
 
-    TriggerServerEvent('cw-core:server:updateCharacterPosition', {
+    TriggerServerEvent('cw-core:server:saveCurrentPosition', {
         x = coords.x,
         y = coords.y,
         z = coords.z,
@@ -52,6 +52,8 @@ end
 
 local function OpenCharacterMenu()
     SaveCurrentPosition()
+
+    Wait(300)
 
     characterSelected = false
     TriggerServerEvent('cw-characters:server:clearSelectedCharacter')
