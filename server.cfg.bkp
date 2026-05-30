@@ -1,66 +1,47 @@
 # This file is a minimal version of the default config file.
 # This is NOT supposed to be enough for most servers.
+# Please read the fivem documentation:
+#   https://aka.cfx.re/server-commands
+#   https://docs.fivem.net/docs/server-manual/setting-up-a-server/
 
-## Server Info
+## You SHOULD edit the following:
 sv_hostname "localrp built with RedM Basic Server!"
 sets sv_projectName "[RedM Basic Server] localrp"
 sets sv_projectDesc "Recipe for the base resources required to run a minimal RedM server."
 sets tags "default, deployer"
 sets locale "root-AQ"
 
-## Database
 set mysql_connection_string "mysql://root:Insert000!@127.0.0.1:3306/clearwork?charset=utf8mb4"
 
-## Game Settings
+## You CAN edit the following:
 set gamename rdr3
-sv_enforceGameBuild 1491
-
-## Network
-sv_licenseKey "ТВОЙ_CFX_KEY"
+sv_enforceGameBuild 1491 #September 2022 update
+sv_licenseKey "cfxk_JYoMCb6IppkoNoNoih14_1Kes2T"
 sv_maxclients 48
-
 endpoint_add_tcp "0.0.0.0:30120"
 endpoint_add_udp "0.0.0.0:30120"
-
 set steam_webApiKey "none"
 set resources_useSystemChat true
 
-####################################################
-# Resources
-####################################################
-
+## These resources will start by default.
 ensure [oxmysql]
-
 ensure mapmanager
 ensure chat
 ensure spawnmanager
 ensure sessionmanager-rdr3
 ensure redm-map-one
 ensure hardcap
-
 ensure cw-core
 ensure cw-characters
 ensure cw-spawn
 ensure cw-admin
 
-####################################################
-# Admin Permissions
-####################################################
+## Add system admins
+add_ace group.admin command allow # allow all commands
+add_ace group.admin command.quit deny # but don't allow quit
 
-# Стандартные права администратора
-add_ace group.admin command allow
-add_ace group.admin command.quit deny
-
-# Права для Clearwork Admin
+## Clearwork admin permissions
 add_ace group.admin clearwork.owner allow
 
-# На всякий случай для консоли сервера
-add_ace resource.console clearwork.owner allow
-
-# Твои идентификаторы
-add_principal identifier.fivem:16208961 group.admin
-add_principal identifier.discord:1197115080819613718 group.admin
-
-####################################################
-# End
-####################################################
+add_principal identifier.fivem:16208961 group.admin #vainainon
+add_principal identifier.discord:1197115080819613718 group.admin #vainainon
