@@ -1,10 +1,15 @@
 local Config = CWAdminConfig
 
 local function BuildDashboard(src)
+    local roleData = CWAdmin.GetRoleData(src)
+
     return {
         admin = {
             source = src,
-            name = GetPlayerName(src) or 'unknown'
+            name = GetPlayerName(src) or 'unknown',
+            role = roleData.role,
+            role_label = roleData.label,
+            role_level = roleData.level
         },
 
         stats = {

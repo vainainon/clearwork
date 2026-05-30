@@ -2,30 +2,6 @@ CWAdmin = CWAdmin or {}
 
 local Config = CWAdminConfig or {}
 
-function CWAdmin.IsAdmin(src)
-    if src == 0 then
-        return true
-    end
-
-    return IsPlayerAceAllowed(src, Config.Ace.admin)
-end
-
-function CWAdmin.HasPermission(src, ace)
-    if src == 0 then
-        return true
-    end
-
-    if Config.Ace and Config.Ace.admin and IsPlayerAceAllowed(src, Config.Ace.admin) then
-        return true
-    end
-
-    if ace and IsPlayerAceAllowed(src, ace) then
-        return true
-    end
-
-    return false
-end
-
 function CWAdmin.SendError(src, message)
     TriggerClientEvent('cw-admin:client:error', src, tostring(message or 'Ошибка.'))
 end
@@ -55,4 +31,33 @@ function CWAdmin.AdminLog(src, action, data)
         tostring(action),
         data and json.encode(data) or '{}'
     ))
+end
+
+function CWAdmin.IsOwner(src)
+    if src == 0 then
+        return true
+    end
+
+    return IsPlayerAceAllowed(src, Config.Ace.owner)
+end
+
+function CWAdmin.IsAdmin(src)
+    local role = CWAdmin.GetAdminRole(src)
+
+    return role ~= 'user'
+end
+
+function CWAdmin.HasPermission(src, aceOrPermission)
+    if src == 0 then
+        return true
+    end
+
+    if CWAdmin.IsOwner(src) then
+        return true
+    end
+
+    local role = CWAdmin.GetAdminRole(src)
+    local permission = Config.AceToPermission[aceOrPermission] or aceOrPermission
+
+    return CWAdmin.RoleHasPermission(role, permission)
 end

@@ -389,6 +389,19 @@ function renderPlayers(players) {
 
         var coords = getCoords(player);
 
+        var roleLabel = player.role_label || 'User';
+        var roleClass = 'role-user';
+
+        if (player.role === 'owner') {
+            roleClass = 'role-owner';
+        } else if (player.role === 'general') {
+            roleClass = 'role-general';
+        } else if (player.role === 'admin') {
+            roleClass = 'role-admin';
+        } else if (player.role === 'helper') {
+            roleClass = 'role-helper';
+        }
+
         var card = document.createElement('div');
         card.className = 'player-card';
 
@@ -406,6 +419,9 @@ function renderPlayers(players) {
 
             '<p><b>' + RU.character + ':</b> ' + escapeHtml(characterName) + '</p>' +
             '<p><b>Ping:</b> ' + escapeHtml(player.ping) + '</p>' +
+
+            '<p><b>\u041f\u0440\u0430\u0432\u0430:</b> <span class="' + roleClass + '">' + escapeHtml(roleLabel) + '</span></p>' +
+            '<p><b>Identifier:</b> ' + escapeHtml(player.role_identifier || '-') + '</p>' +
 
             '<p><b>X:</b> ' + coords.x.toFixed(2) + '</p>' +
             '<p><b>Y:</b> ' + coords.y.toFixed(2) + '</p>' +

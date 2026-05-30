@@ -5,7 +5,7 @@ rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aw
 
 author 'clearwork'
 description 'ClearWork Admin System'
-version '0.2.1'
+version '0.3.0'
 
 ui_page 'html/index.html'
 
@@ -20,6 +20,7 @@ server_scripts {
 
     'server/config.lua',
     'server/core.lua',
+    'server/roles.lua',
     'server/characters.lua',
     'server/players.lua',
     'server/tools.lua',

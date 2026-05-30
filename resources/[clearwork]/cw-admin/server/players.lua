@@ -10,6 +10,8 @@ function CWAdmin.GetOnlinePlayers()
 
         if targetSrc then
             local cwPlayer = CWAdmin.GetCWPlayer(targetSrc)
+            local roleData = CWAdmin.GetRoleData(targetSrc)
+
             local ped = GetPlayerPed(targetSrc)
 
             local coords = {
@@ -21,6 +23,7 @@ function CWAdmin.GetOnlinePlayers()
 
             if ped and ped ~= 0 then
                 local c = GetEntityCoords(ped)
+
                 coords.x = tonumber(c.x) or 0.0
                 coords.y = tonumber(c.y) or 0.0
                 coords.z = tonumber(c.z) or 0.0
@@ -41,8 +44,15 @@ function CWAdmin.GetOnlinePlayers()
             players[#players + 1] = {
                 source = targetSrc,
                 name = GetPlayerName(targetSrc) or ('ID ' .. targetSrc),
+
                 account_name = cwPlayer and cwPlayer.name or nil,
                 account_id = cwPlayer and cwPlayer.account_id or nil,
+
+                role = roleData.role,
+                role_label = roleData.label,
+                role_level = roleData.level,
+                role_identifier = roleData.identifier,
+
                 character = character,
                 ping = GetPlayerPing(targetSrc) or 0,
                 frozen = CWAdmin.FrozenPlayers[targetSrc] == true,
@@ -79,6 +89,25 @@ local function GetPlayerCoords(src)
     }
 end
 
+local function IsTargetProtected(src, target)
+    if target == src then
+        return false
+    end
+
+    local actorRole = CWAdmin.GetAdminRole(src)
+    local targetRole = CWAdmin.GetAdminRole(target)
+
+    if targetRole == 'owner' then
+        return true
+    end
+
+    if CWAdmin.GetRoleLevel(targetRole) >= CWAdmin.GetRoleLevel(actorRole) then
+        return true
+    end
+
+    return false
+end
+
 RegisterNetEvent('cw-admin:server:players:list', function()
     local src = source
 
@@ -99,6 +128,11 @@ RegisterNetEvent('cw-admin:server:players:action', function(action, target, payl
 
     if not target or not GetPlayerName(target) then
         CWAdmin.SendError(src, 'Игрок не найден.')
+        return
+    end
+
+    if IsTargetProtected(src, target) then
+        CWAdmin.SendError(src, 'Нельзя применять действие к администратору с равной или более высокой ролью.')
         return
     end
 

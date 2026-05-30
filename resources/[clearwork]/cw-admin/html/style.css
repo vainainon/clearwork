@@ -348,3 +348,28 @@ button {
     #actionConfirm:hover {
         background: #8a0000;
     }
+
+.role-owner {
+    color: #7c0600;
+    font-weight: bold;
+}
+
+.role-general {
+    color: #9b2200;
+    font-weight: bold;
+}
+
+.role-admin {
+    color: #3b210f;
+    font-weight: bold;
+}
+
+.role-helper {
+    color: #0b4b18;
+    font-weight: bold;
+}
+
+.role-user {
+    color: #555;
+    font-weight: bold;
+}
