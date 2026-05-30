@@ -72,7 +72,8 @@ body {
     }
 
 button,
-input {
+input,
+textarea {
     width: 100%;
     padding: 12px;
     border: 2px solid #3b210f;
@@ -121,6 +122,14 @@ button {
     color: #6b0000;
     font-weight: bold;
 }
+
+    #notice.success {
+        color: #0b4b18;
+    }
+
+    #notice.error {
+        color: #6b0000;
+    }
 
 .tab-view {
     display: none;
@@ -290,6 +299,7 @@ button {
     display: flex;
     align-items: center;
     justify-content: center;
+    z-index: 50;
 }
 
 .modal-box {
@@ -300,12 +310,41 @@ button {
     box-shadow: 0 0 30px rgba(0, 0, 0, 0.8);
 }
 
+    .modal-box h2 {
+        margin-top: 0;
+    }
+
 .modal-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
 }
 
-#confirmYes {
+.modal-label {
+    display: block;
+    margin: 12px 0 6px;
+    font-weight: bold;
+}
+
+.modal-textarea {
+    width: 100%;
+    min-height: 90px;
+    resize: vertical;
+    padding: 12px;
+    border: 2px solid #3b210f;
+    background: #f1dfaa;
+    color: #2b1608;
+    font-family: Georgia, serif;
+    font-size: 16px;
+    margin-bottom: 14px;
+}
+
+#confirmYes,
+#actionConfirm {
     background: #6b0000;
 }
+
+    #confirmYes:hover,
+    #actionConfirm:hover {
+        background: #8a0000;
+    }
