@@ -8,7 +8,6 @@ const searchInput = $('searchInput');
 const searchBtn = $('searchBtn');
 const closeBtn = $('closeBtn');
 const errorBox = $('error');
-
 const modal = $('confirmModal');
 const confirmText = $('confirmText');
 const confirmYes = $('confirmYes');
@@ -26,10 +25,55 @@ function post(name, data = {}) {
     });
 }
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+}
+
+function money(value) {
+    const number = Number(value);
+
+    if (Number.isNaN(number)) {
+        return escapeHtml(value ?? '0.00');
+    }
+
+    return number.toFixed(2);
+}
+
 function setError(message) {
     if (errorBox) {
         errorBox.textContent = message || '';
     }
+}
+
+function getCharacterStatus(character) {
+    if (character.delete_requested_at) {
+        return {
+            text: 'Удаление',
+            className: 'danger',
+            description: 'Поставлен на удаление'
+        };
+    }
+
+    if (character.active_character) {
+        return {
+            text: 'Активен',
+            className: 'ok',
+            description: character.active_player_name
+                ? `Сейчас играет: ${character.active_player_name}`
+                : 'Сейчас выбран в игре'
+        };
+    }
+
+    return {
+        text: 'Не выбран',
+        className: '',
+        description: 'Персонаж не выбран сейчас'
+    };
 }
 
 function openConfirm(character) {
@@ -61,45 +105,65 @@ function renderCharacters(characters) {
 
     if (!characters.length) {
         characterList.innerHTML = `
-            <div class="empty">Персонажи не найдены.</div>
+            <div class="empty">
+                Персонажи не найдены.
+            </div>
         `;
         return;
     }
 
     characters.forEach((character) => {
+        const status = getCharacterStatus(character);
+
         const card = document.createElement('div');
         card.className = 'character-card';
 
-        const deletedStatus = character.delete_requested_at
-            ? `<span class="status danger">Поставлен на удаление</span>`
-            : `<span class="status ok">Активен</span>`;
+        const deleteDisabled = character.active_character ? 'disabled' : '';
+        const deleteTitle = character.active_character
+            ? 'Нельзя удалить персонажа, который сейчас активен в игре'
+            : 'Удалить персонажа';
 
         card.innerHTML = `
             <div class="char-main">
-                <h3>${character.firstname} ${character.lastname}</h3>
-                ${deletedStatus}
+                <h3>${escapeHtml(character.firstname)} ${escapeHtml(character.lastname)}</h3>
+                <span class="status ${status.className}" title="${escapeHtml(status.description)}">
+                    ${escapeHtml(status.text)}
+                </span>
             </div>
 
             <div class="grid">
-                <p><b>Character ID:</b> ${character.id}</p>
-                <p><b>Account ID:</b> ${character.account_id}</p>
-                <p><b>Аккаунт:</b> ${character.account_name || 'unknown'}</p>
-                <p><b>Slot:</b> ${character.slot}</p>
-                <p><b>Пол:</b> ${character.gender}</p>
-                <p><b>Возраст:</b> ${character.age}</p>
-                <p><b>Cash:</b> $${character.cash}</p>
-                <p><b>Bank:</b> $${character.bank}</p>
-                <p><b>License:</b> ${character.license || '-'}</p>
-                <p><b>Discord:</b> ${character.discord || '-'}</p>
-                <p><b>Created:</b> ${character.created_at || '-'}</p>
+                <p><b>Character ID:</b> ${escapeHtml(character.id)}</p>
+                <p><b>Account ID:</b> ${escapeHtml(character.account_id)}</p>
+
+                <p><b>Аккаунт:</b> ${escapeHtml(character.account_name || 'unknown')}</p>
+                <p><b>Slot:</b> ${escapeHtml(character.slot)}</p>
+
+                <p><b>Пол:</b> ${escapeHtml(character.gender)}</p>
+                <p><b>Возраст:</b> ${escapeHtml(character.age)}</p>
+
+                <p><b>Cash:</b> $${money(character.cash)}</p>
+                <p><b>Bank:</b> $${money(character.bank)}</p>
+
+                <p><b>License:</b> ${escapeHtml(character.license || '-')}</p>
+                <p><b>Discord:</b> ${escapeHtml(character.discord || '-')}</p>
+
+                <p><b>Created:</b> ${escapeHtml(character.created_at || '-')}</p>
+                <p><b>Статус:</b> ${escapeHtml(status.description)}</p>
             </div>
 
-            <button class="delete-btn">Удалить персонажа</button>
+            <button
+                class="delete-btn"
+                type="button"
+                ${deleteDisabled}
+                title="${escapeHtml(deleteTitle)}"
+            >
+                Удалить персонажа
+            </button>
         `;
 
         const deleteBtn = card.querySelector('.delete-btn');
 
-        if (deleteBtn) {
+        if (deleteBtn && !character.active_character) {
             deleteBtn.addEventListener('click', () => {
                 openConfirm(character);
             });
@@ -134,8 +198,6 @@ if (closeBtn) {
         post('closeMenu');
     });
 }
-
-
 
 if (confirmYes) {
     confirmYes.addEventListener('click', () => {

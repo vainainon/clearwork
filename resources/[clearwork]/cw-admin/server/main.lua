@@ -6,6 +6,57 @@ local function SendError(src, message)
     TriggerClientEvent('cw-admin:client:error', src, message)
 end
 
+local function GetActiveCharacters()
+    local activeCharacters = {}
+
+    for _, playerId in ipairs(GetPlayers()) do
+        local targetSrc = tonumber(playerId)
+
+        if targetSrc then
+            local ok, player = pcall(function()
+                return exports['cw-core']:GetPlayer(targetSrc)
+            end)
+
+            if ok and player and player.character and player.character.id then
+                local characterId = tonumber(player.character.id)
+
+                if characterId then
+                    activeCharacters[characterId] = {
+                        source = targetSrc,
+                        player_name = player.name or GetPlayerName(targetSrc) or ('ID ' .. targetSrc),
+                        account_id = tonumber(player.account_id)
+                    }
+                end
+            end
+        end
+    end
+
+    return activeCharacters
+end
+
+local function DecorateCharacters(characters)
+    characters = characters or {}
+
+    local activeCharacters = GetActiveCharacters()
+
+    for _, character in ipairs(characters) do
+        local characterId = tonumber(character.id)
+        local activeData = characterId and activeCharacters[characterId] or nil
+
+        character.active_character = activeData ~= nil
+
+        if activeData then
+            character.active_source = activeData.source
+            character.active_player_name = activeData.player_name
+        else
+            character.active_source = nil
+            character.active_player_name = nil
+        end
+    end
+
+    return characters
+end
+
 RegisterNetEvent('cw-admin:server:searchCharacters', function(query)
     local src = source
 
@@ -16,7 +67,6 @@ RegisterNetEvent('cw-admin:server:searchCharacters', function(query)
     end
 
     query = tostring(query or '')
-    local like = '%' .. query .. '%'
 
     local characters
 
@@ -45,6 +95,8 @@ RegisterNetEvent('cw-admin:server:searchCharacters', function(query)
             LIMIT 100
         ]])
     else
+        local like = '%' .. query .. '%'
+
         characters = MySQL.query.await([[
             SELECT
                 c.id,
@@ -86,6 +138,8 @@ RegisterNetEvent('cw-admin:server:searchCharacters', function(query)
         })
     end
 
+    characters = DecorateCharacters(characters)
+
     print(('[cw-admin] Search "%s" returned %s characters'):format(query, #(characters or {})))
 
     TriggerClientEvent('cw-admin:client:receiveCharacters', src, characters or {})
@@ -101,8 +155,16 @@ RegisterNetEvent('cw-admin:server:deleteCharacter', function(characterId)
     end
 
     characterId = tonumber(characterId)
+
     if not characterId then
         SendError(src, 'Некорректный ID персонажа.')
+        return
+    end
+
+    local activeCharacters = GetActiveCharacters()
+
+    if activeCharacters[characterId] then
+        SendError(src, 'Нельзя удалить персонажа, который сейчас активен в игре.')
         return
     end
 
@@ -111,7 +173,9 @@ RegisterNetEvent('cw-admin:server:deleteCharacter', function(characterId)
         FROM characters
         WHERE id = ?
         LIMIT 1
-    ]], { characterId })
+    ]], {
+        characterId
+    })
 
     if not character then
         SendError(src, 'Персонаж не найден.')
@@ -121,7 +185,9 @@ RegisterNetEvent('cw-admin:server:deleteCharacter', function(characterId)
     MySQL.update.await([[
         DELETE FROM characters
         WHERE id = ?
-    ]], { characterId })
+    ]], {
+        characterId
+    })
 
     print(('[cw-admin] Admin %s deleted character %s %s [%s]'):format(
         GetPlayerName(src),
