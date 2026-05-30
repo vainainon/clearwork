@@ -213,6 +213,11 @@ RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(charact
         return
     end
 
+    if player.character and tonumber(player.character.id) == characterId then
+        TriggerClientEvent('cw-characters:client:deleteFailed', src, 'Нельзя поставить на удаление персонажа, за которого ты сейчас играешь.')
+        return
+    end
+
     local character = MySQL.single.await([[
         SELECT
             id,
@@ -333,6 +338,10 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(characterId)
         return
     end
 
+    if player.character then
+        TriggerClientEvent('cw-core:client:requestCurrentPositionSave', src)
+    end
+
     local character = MySQL.single.await([[
         SELECT *
         FROM characters
@@ -392,7 +401,7 @@ RegisterNetEvent('cw-characters:server:openCharacterMenu', function(coords)
     if player.character and type(coords) == 'table' then
         exports['cw-core']:SaveCharacterPosition(src, coords)
 
-        print(('[cw-characters] Saved position before character switch: %s %.2f %.2f %.2f'):format(
+        print(('[cw-characters] Saved position before opening character menu: %s %.2f %.2f %.2f'):format(
             player.character.id,
             tonumber(coords.x) or 0.0,
             tonumber(coords.y) or 0.0,
@@ -400,7 +409,10 @@ RegisterNetEvent('cw-characters:server:openCharacterMenu', function(coords)
         ))
     end
 
-    exports['cw-core']:ClearCharacter(src)
+    -- ВАЖНО:
+    -- Больше не делаем ClearCharacter при открытии /chars.
+    -- Открытие меню не должно сбрасывать активного персонажа.
+    -- Активный персонаж меняется только через selectCharacter.
 
     SendCharacters(src, player.account_id)
 end)
