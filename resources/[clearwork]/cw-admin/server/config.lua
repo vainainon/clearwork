@@ -1,4 +1,4 @@
-CWAdminConfig = {}
+CWAdminConfig = CWAdminConfig or {}
 
 CWAdminConfig.Ace = {
     admin = 'clearwork.admin',

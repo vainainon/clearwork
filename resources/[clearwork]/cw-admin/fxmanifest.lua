@@ -5,7 +5,7 @@ rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aw
 
 author 'clearwork'
 description 'ClearWork Admin System'
-version '0.2.0'
+version '0.2.1'
 
 ui_page 'html/index.html'
 
