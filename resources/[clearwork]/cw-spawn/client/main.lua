@@ -1,8 +1,10 @@
-local skySpawn = {
-    x = 0.0,
-    y = 0.0,
-    z = 2000.0,
-    heading = 0.0,
+local menuSpawn = {
+    -- Временная земляная точка для первичного ped до выбора персонажа.
+    -- Если что-то пойдёт не так, игрок окажется на земле, а не в небе.
+    x = 2632.52,
+    y = -1312.31,
+    z = 51.42,
+    heading = 270.0,
     model = 'mp_male'
 }
 
@@ -14,7 +16,7 @@ local defaultSpawn = {
     model = 'mp_male'
 }
 
-local hiddenSpawnReady = false
+local menuSpawnReady = false
 
 local function DisableSpawnManagerAutoSpawn()
     if GetResourceState('spawnmanager') == 'started' then
@@ -92,30 +94,8 @@ local function SafeSetCoords(coords)
     end
 
     SetEntityHeading(ped, coords.heading or 0.0)
+
     return true
-end
-
-local function SetPedHidden(state)
-    local ped = PlayerPedId()
-
-    if not ped or ped == 0 then
-        return
-    end
-
-    FreezeEntityPosition(ped, state)
-    SetEntityVisible(ped, not state, false)
-    SetEntityCollision(ped, not state, not state)
-
-    if state then
-        SetEntityAlpha(ped, 0, false)
-        ClearPedTasksImmediately(ped)
-    else
-        if type(ResetEntityAlpha) == 'function' then
-            ResetEntityAlpha(ped)
-        else
-            SetEntityAlpha(ped, 255, false)
-        end
-    end
 end
 
 local function FinalizePed(coords, visible, health)
@@ -150,36 +130,34 @@ local function FinalizePed(coords, visible, health)
     return true
 end
 
-local function EnsureHiddenSpawn(forceSky)
+local function EnsureInitialMenuPed()
     DisableSpawnManagerAutoSpawn()
 
-    if not forceSky and hiddenSpawnReady then
-        SetPedHidden(true)
+    if menuSpawnReady then
+        FinalizePed(menuSpawn, false, 200)
         return
     end
 
     DoScreenFadeOut(0)
 
-    local spawned = SpawnWithSpawnManager(skySpawn)
+    local spawned = SpawnWithSpawnManager(menuSpawn)
 
     if spawned then
         Wait(900)
-        FinalizePed(skySpawn, false, 200)
+        FinalizePed(menuSpawn, false, 200)
     else
-        SafeSetCoords(skySpawn)
-        FinalizePed(skySpawn, false, 200)
+        SafeSetCoords(menuSpawn)
+        FinalizePed(menuSpawn, false, 200)
     end
 
-    hiddenSpawnReady = true
+    menuSpawnReady = true
 end
 
 CreateThread(function()
     Wait(1000)
     DisableSpawnManagerAutoSpawn()
-
-    -- На входе создаём настоящий ped через spawnmanager, но прячем его в skybox.
-    -- Это убирает состояние "камера без персонажа".
-    EnsureHiddenSpawn(true)
+    -- ВАЖНО: больше не создаём menu ped автоматически при старте ресурса.
+    -- Его создаёт cw-characters только на первом входе, до выбора персонажа.
 end)
 
 AddEventHandler('onClientResourceStart', function(resourceName)
@@ -188,8 +166,12 @@ AddEventHandler('onClientResourceStart', function(resourceName)
     end
 end)
 
-RegisterNetEvent('cw-spawn:client:prepareCharacterMenu', function(forceSky)
-    EnsureHiddenSpawn(forceSky == true)
+RegisterNetEvent('cw-spawn:client:prepareCharacterMenu', function(firstMenu)
+    -- firstMenu=true: игрок только зашёл и ещё не выбрал персонажа.
+    -- firstMenu=false: обычный /chars во время игры. Ничего не трогаем, не телепортируем и не прячем ped.
+    if firstMenu == true then
+        EnsureInitialMenuPed()
+    end
 end)
 
 RegisterNetEvent('cw-spawn:client:spawnCharacter', function(character)
@@ -210,7 +192,7 @@ RegisterNetEvent('cw-spawn:client:spawnCharacter', function(character)
         FinalizePed(coords, true, 200)
     end
 
-    hiddenSpawnReady = false
+    menuSpawnReady = false
 
     Wait(250)
     DoScreenFadeIn(500)

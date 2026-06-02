@@ -4,6 +4,7 @@ local characterSelected = false
 local currentCharacterId = nil
 local firstOpenDone = false
 local accountRetryCount = 0
+local hidePedForCurrentMenu = false
 
 local function DisableSpawnManagerAutoSpawn()
     if GetResourceState('spawnmanager') == 'started' then
@@ -40,6 +41,10 @@ local function SetPedHiddenInCharacterMenu(state)
         else
             SetEntityAlpha(ped, 255, false)
         end
+
+        FreezeEntityPosition(ped, false)
+        SetEntityCollision(ped, true, true)
+        SetEntityVisible(ped, true, false)
     end
 end
 
@@ -87,7 +92,12 @@ local function OpenUI()
 
     SetNuiFocus(true, true)
     SetNuiFocusKeepInput(false)
-    SetPedHiddenInCharacterMenu(true)
+
+    -- На первом входе ped-заглушка скрыта за меню.
+    -- При обычном /chars во время игры ped НЕ прячем и НЕ телепортируем.
+    if hidePedForCurrentMenu then
+        SetPedHiddenInCharacterMenu(true)
+    end
 
     SendNUIMessage({
         action = 'open',
@@ -103,9 +113,11 @@ local function CloseUI(unhidePed)
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
 
-    if unhidePed ~= false then
+    if hidePedForCurrentMenu and unhidePed ~= false then
         SetPedHiddenInCharacterMenu(false)
     end
+
+    hidePedForCurrentMenu = false
 
     SendNUIMessage({
         action = 'close'
@@ -124,20 +136,27 @@ local function OpenCharacterMenu()
     DisableSpawnManagerAutoSpawn()
 
     local firstMenu = not characterSelected
+    hidePedForCurrentMenu = firstMenu
 
-    DoScreenFadeOut(200)
-    Wait(250)
+    if firstMenu then
+        DoScreenFadeOut(200)
+        Wait(250)
 
-    -- Если персонажа ещё нет, создаём настоящий ped через spawnmanager в скрытой skybox-точке.
-    -- Если персонаж уже выбран, просто прячем текущего ped и сохраняем его позицию.
-    TriggerEvent('cw-spawn:client:prepareCharacterMenu', firstMenu)
-    Wait(firstMenu and 600 or 50)
+        -- Только первый вход: создаём ped-заглушку через spawnmanager на земле.
+        TriggerEvent('cw-spawn:client:prepareCharacterMenu', true)
+        Wait(600)
 
-    SetPedHiddenInCharacterMenu(true)
-    RequestCharacters(characterSelected)
+        SetPedHiddenInCharacterMenu(true)
+        RequestCharacters(false)
 
-    Wait(250)
-    DoScreenFadeIn(400)
+        Wait(250)
+        DoScreenFadeIn(400)
+        return
+    end
+
+    -- Обычный /chars во время игры:
+    -- не вызываем prepareCharacterMenu, не прячем ped, не переносим его в menu-spawn.
+    RequestCharacters(true)
 end
 
 CreateThread(function()
@@ -204,7 +223,8 @@ RegisterNetEvent('cw-characters:client:characterSelected', function(character)
     characterSelected = true
     currentCharacterId = tonumber(character.id)
 
-    -- Важно: не раскрываем skybox-ped до завершения cw-spawn.
+    -- Не раскрываем menu-ped до завершения cw-spawn.
+    -- Если /chars открыт во время игры, текущий ped и так стоит на месте.
     CloseUI(false)
     ApplyBasicAppearance(character)
 
@@ -294,5 +314,8 @@ AddEventHandler('onResourceStop', function(resourceName)
 
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
-    SetPedHiddenInCharacterMenu(false)
+
+    if hidePedForCurrentMenu then
+        SetPedHiddenInCharacterMenu(false)
+    end
 end)
