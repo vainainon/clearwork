@@ -7,11 +7,12 @@
     var notice = document.getElementById('notice');
     var equipmentEl = document.getElementById('equipment');
     var containersEl = document.getElementById('containers');
+    var groundEl = document.getElementById('ground');
     var selectionInfo = document.getElementById('selectionInfo');
 
-    var APP_VERSION = 'v24-centered-item-text';
+    var APP_VERSION = 'v25-ground-loot-panel';
     var CELL = 48;
-    var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {} };
+    var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {}, ground: null };
     var selected = null;
     var selectedRotated = false;
     var customDrag = null;
@@ -128,6 +129,24 @@
             if (state.equipment[slot] && Number(state.equipment[slot].id) === id) return state.equipment[slot];
         }
         return null;
+    }
+
+
+    function findGroundDrop(id) {
+        id = Number(id);
+        var ground = state.ground || {};
+        var items = ground.items || [];
+        for (var i = 0; i < items.length; i++) {
+            if (Number(items[i].drop_id || items[i].ground_id) === id) return items[i];
+        }
+        return null;
+    }
+
+    function dragCurrentItem(drag) {
+        drag = drag || customDrag;
+        if (!drag) return null;
+        if (drag.source === 'ground') return drag.item || findGroundDrop(drag.dropId);
+        return findItem(drag.itemId);
     }
 
     function selectItem(item) {
@@ -275,28 +294,32 @@
         return { cell: cell, slot: slot };
     }
 
-    function startItemMouseDrag(event, item) {
+    function startItemMouseDrag(event, item, options) {
         if (!event || event.button !== 0) return;
         if (closestElement(event.target, 'input, textarea, select, button')) return;
+        options = options || {};
 
         var itemAmount = Math.max(1, Math.floor(Number(item.amount || 1)));
         var moveAmount = itemAmount;
         var splitMode = false;
         var ctrlMode = event.ctrlKey === true && itemAmount > 1;
 
-        if (event.altKey && itemAmount > 1) {
+        if (event.altKey && itemAmount > 1 && options.source !== 'ground') {
             moveAmount = itemAmount - 1;
             splitMode = true;
             ctrlMode = false;
         }
 
         customDrag = {
-            itemId: Number(item.id),
+            source: options.source || 'inventory',
+            itemId: options.source === 'ground' ? null : Number(item.id),
+            dropId: options.source === 'ground' ? Number(item.drop_id || item.ground_id) : null,
+            item: options.source === 'ground' ? item : null,
             amount: moveAmount,
             split: splitMode,
             ctrlAmount: ctrlMode,
             rotated: item.rotated === true || item.rotated === 1,
-            sourceElement: closestElement(event.target, '.grid-item, .equip-item'),
+            sourceElement: closestElement(event.target, '.grid-item, .equip-item, .ground-item'),
             startX: event.clientX,
             startY: event.clientY,
             lastX: event.clientX,
@@ -309,7 +332,7 @@
         if (!customDrag || !customDrag.dragging) return;
         customDrag.lastX = x;
         customDrag.lastY = y;
-        var item = findItem(customDrag.itemId);
+        var item = dragCurrentItem(customDrag);
         if (!item) return;
         selectedRotated = customDrag.rotated === true;
 
@@ -344,7 +367,7 @@
         if (event && event.stopPropagation) event.stopPropagation();
         suppressItemClick = true;
 
-        var item = findItem(drag.itemId);
+        var item = drag.source === 'ground' ? (drag.item || findGroundDrop(drag.dropId)) : findItem(drag.itemId);
         var x = event && typeof event.clientX === 'number' ? event.clientX : drag.startX;
         var y = event && typeof event.clientY === 'number' ? event.clientY : drag.startY;
         var target = getDropTargetFromPoint(x, y);
@@ -366,7 +389,19 @@
             };
             var sendMove = function (amount) {
                 payload.amount = clampAmount(amount || payload.amount, Math.max(1, Math.floor(Number(item.amount || 1))));
-                if (item.equip_slot) post('unequipItem', payload);
+                if (drag.source === 'ground') {
+                    post('pickupDropItem', {
+                        dropId: drag.dropId,
+                        amount: payload.amount,
+                        target: {
+                            type: 'container',
+                            containerId: payload.containerId,
+                            x: payload.x,
+                            y: payload.y,
+                            rotated: payload.rotated
+                        }
+                    });
+                } else if (item.equip_slot) post('unequipItem', payload);
                 else post('moveItem', payload);
             };
             if ((drag.ctrlAmount === true || (event && event.ctrlKey === true)) && Number(item.amount || 1) > 1 && drag.split !== true) {
@@ -378,12 +413,18 @@
         }
 
         if (target.slot) {
-            post('equipItem', { itemId: item.id, slot: target.slot.dataset.slot });
+            if (drag.source === 'ground') {
+                post('pickupDropItem', { dropId: drag.dropId, amount: 1, target: { type: 'slot', slot: target.slot.dataset.slot } });
+            } else {
+                post('equipItem', { itemId: item.id, slot: target.slot.dataset.slot });
+            }
             return true;
         }
 
         if (!shell) {
-            post('dropItem', { itemId: item.id });
+            if (drag.source !== 'ground') {
+                post('dropItem', { itemId: item.id });
+            }
             return true;
         }
 
@@ -475,9 +516,57 @@
         (state.containers || []).forEach(function (container) { containersEl.appendChild(renderContainer(container)); });
     }
 
+    function renderGround() {
+        if (!groundEl) return;
+        groundEl.innerHTML = '';
+        var ground = state.ground || { width: 6, height: 8, items: [] };
+        var w = Number(ground.width || 6) || 6;
+        var h = Number(ground.height || 8) || 8;
+        var box = document.createElement('div');
+        box.className = 'ground-box';
+        box.innerHTML = '<div class="container-head"><h2>' + escapeHtml(ground.label || 'Земля') + '</h2><span>' + escapeHtml(w) + 'x' + escapeHtml(h) + '</span></div>';
+        var grid = document.createElement('div');
+        grid.className = 'ground-grid';
+        grid.style.gridTemplateColumns = 'repeat(' + w + ', ' + CELL + 'px)';
+        grid.style.gridTemplateRows = 'repeat(' + h + ', ' + CELL + 'px)';
+        grid.style.width = (w * CELL) + 'px';
+        grid.style.height = (h * CELL) + 'px';
+        for (var yy = 0; yy < h; yy++) {
+            for (var xx = 0; xx < w; xx++) {
+                var cell = document.createElement('div');
+                cell.className = 'ground-cell';
+                grid.appendChild(cell);
+            }
+        }
+        (ground.items || []).forEach(function (item) {
+            var el = document.createElement('div');
+            el.className = 'ground-item ' + escapeHtml(item.type || '');
+            el.style.left = (Number(item.x || 0) * CELL) + 'px';
+            el.style.top = (Number(item.y || 0) * CELL) + 'px';
+            el.style.width = (Number(item.width || 1) * CELL) + 'px';
+            el.style.height = (Number(item.height || 1) * CELL) + 'px';
+            el.title = itemLabel(item) + '\n' + (item.description || '');
+            el.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
+                '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) : '') + '</div>';
+            el.addEventListener('mousedown', function (e) { startItemMouseDrag(e, item, { source: 'ground' }); });
+            el.addEventListener('mouseenter', function () { showItemInfo(item); });
+            el.addEventListener('mouseleave', function () { if (!customDrag) showItemInfo(null); });
+            grid.appendChild(el);
+        });
+        box.appendChild(grid);
+        if (!(ground.items || []).length) {
+            var empty = document.createElement('div');
+            empty.className = 'ground-empty';
+            empty.textContent = 'Рядом ничего нет';
+            box.appendChild(empty);
+        }
+        groundEl.appendChild(box);
+    }
+
     function render() {
         renderEquipment();
         renderContainers();
+        renderGround();
         updateSelectionInfo();
     }
 
@@ -496,9 +585,9 @@
         if (!customDrag.dragging && (dx > 4 || dy > 4)) {
             customDrag.dragging = true;
             if (customDrag.sourceElement && customDrag.sourceElement.classList) customDrag.sourceElement.classList.add('dragging-source');
-            var item = findItem(customDrag.itemId);
+            var item = dragCurrentItem(customDrag);
             if (item) {
-                selected = Number(item.id);
+                if (customDrag.source !== 'ground') selected = Number(item.id);
                 customDrag.rotated = item.rotated === true || item.rotated === 1;
                 selectedRotated = customDrag.rotated === true;
             }

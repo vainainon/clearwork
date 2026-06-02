@@ -1,8 +1,20 @@
 local Config = CWInventoryConfig or {}
-local InventoryClientVersion = 'v17-drag-drop-ground'
+local InventoryClientVersion = 'v25-ground-loot-panel'
 print(('[cw-inventory:client] loaded %s'):format(InventoryClientVersion))
 local uiOpen = false
 local lastState = nil
+
+
+local function currentCoordsPayload()
+    local ped = PlayerPedId()
+    local coords = GetEntityCoords(ped)
+    return {
+        x = coords.x,
+        y = coords.y,
+        z = coords.z,
+        heading = GetEntityHeading(ped)
+    }
+end
 
 local function notify(message, color)
     TriggerEvent('chat:addMessage', {
@@ -37,7 +49,7 @@ end
 
 RegisterCommand(Config.OpenCommand or 'inventory', function()
     if Config.Debug then print('[cw-inventory] client command executed') end
-    TriggerServerEvent('cw-inventory:server:openInventory')
+    TriggerServerEvent('cw-inventory:server:openInventory', { coords = currentCoordsPayload() })
 end, false)
 
 -- На части RedM-артефактов RegisterKeyMapping отсутствует.
@@ -115,7 +127,7 @@ RegisterNUICallback('close', function(_, cb)
 end)
 
 RegisterNUICallback('refresh', function(_, cb)
-    TriggerServerEvent('cw-inventory:server:requestState')
+    TriggerServerEvent('cw-inventory:server:requestState', { coords = currentCoordsPayload() })
     cb({ ok = true })
 end)
 
@@ -145,6 +157,14 @@ RegisterNUICallback('dropItem', function(data, cb)
         heading = GetEntityHeading(ped)
     }
     TriggerServerEvent('cw-inventory:server:dropItem', data)
+    cb({ ok = true })
+end)
+
+
+RegisterNUICallback('pickupDropItem', function(data, cb)
+    data = type(data) == 'table' and data or {}
+    data.coords = currentCoordsPayload()
+    TriggerServerEvent('cw-inventory:server:pickupDropItem', data)
     cb({ ok = true })
 end)
 

@@ -2,8 +2,8 @@
     'use strict';
 
     var DEBUG = true;
-    var INVENTORY_JS_VERSION = 'v24-stable-info-hover-layout';
-    var CELL = 34;
+    var INVENTORY_JS_VERSION = 'v25-larger-cells';
+    var CELL = 42;
 
     var lastCharacters = [];
     var currentAdminRole = null;
@@ -254,13 +254,13 @@
             '#inventoryModal, #inventoryModal *:not(input):not(textarea) { user-select: none; -webkit-user-select: none; }',
             '#inventoryModal { position: fixed !important; inset: 0 !important; z-index: 99990 !important; background: rgba(0,0,0,.48); display: flex; align-items: center; justify-content: center; overflow: hidden !important; }',
             '#inventoryModal.hidden { display: none !important; }',
-            '#inventoryModal .inventory-modal-box { width: 1160px; max-width: 94vw; max-height: 84vh; overflow: hidden !important; display: flex; flex-direction: column; }',
+            '#inventoryModal .inventory-modal-box { width: 1240px; max-width: 94vw; max-height: 84vh; overflow: hidden !important; display: flex; flex-direction: column; }',
             '#inventoryModalBody { min-height: 0; overflow: hidden; }',
             '.inventory-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 12px; }',
             '.inventory-head h2 { margin: 0; }',
             '.inventory-head-actions { display: grid; grid-template-columns: 140px 140px; gap: 8px; }',
             '.inventory-debug-line { border: 1px solid rgba(139,0,0,.45); background: rgba(139,0,0,.08); padding: 6px; margin: 8px 0 10px; font-size: 12px; }',
-            '.inventory-main-grid { display: grid; grid-template-columns: 240px minmax(0, 1fr) 315px; gap: 12px; height: calc(84vh - 128px); max-height: calc(84vh - 128px); overflow: hidden; }',
+            '.inventory-main-grid { display: grid; grid-template-columns: 250px minmax(0, 1fr) 315px; gap: 12px; height: calc(84vh - 128px); max-height: calc(84vh - 128px); overflow: hidden; }',
             '.inventory-column { min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; overscroll-behavior: contain; }',
             '.inventory-block { border: 2px solid #3b210f; background: rgba(255,244,205,.55); padding: 10px; margin-bottom: 10px; }',
             '.inventory-block h3 { margin: 0 0 8px; font-size: 20px; }',
@@ -280,7 +280,7 @@
             '.admin-grid-item { position: absolute; box-sizing: border-box; border: 2px solid rgba(59,33,15,.8); background: rgba(59,33,15,.18); padding: 4px; overflow: hidden; pointer-events: auto; cursor: grab; user-select: none; }',
             '.admin-catalog-item.dragging-source, .admin-grid-item.dragging-source, .admin-equip-item.dragging-source { opacity: .32 !important; filter: grayscale(.25); }',
             '.admin-catalog-item.dragging-source *, .admin-grid-item.dragging-source *, .admin-equip-item.dragging-source * { opacity: .45 !important; }',
-            '.admin-grid-item .item-name { position: absolute; left: 3px; right: 3px; top: 3px; bottom: 14px; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; font-size: 12px; line-height: 1.05; overflow-wrap: anywhere; word-break: break-word; overflow: hidden; }',
+            '.admin-grid-item .item-name { position: absolute; left: 3px; right: 3px; top: 3px; bottom: 14px; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; font-size: 13px; line-height: 1.05; overflow-wrap: anywhere; word-break: break-word; overflow: hidden; }',
             '.admin-grid-item .item-meta { position: absolute; right: 4px; bottom: 2px; font-size: 11px; opacity: .9; background: rgba(241,223,170,.65); padding: 0 2px; }',
             '.admin-equip-item { overflow-wrap: anywhere; word-break: break-word; }',
             '.admin-catalog-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }',
@@ -1001,6 +1001,9 @@
             equip: 'Экипировка',
             unequip: 'Снятие',
             drop_ground: 'Выброшено',
+            pickup_ground: 'Поднято с земли',
+            pickup_ground_stack: 'Поднято в стак',
+            pickup_ground_equip: 'Поднято в слот',
             add: 'Добавлено',
             add_stack: 'Добавлено в стак',
             starter: 'Стартовый набор'

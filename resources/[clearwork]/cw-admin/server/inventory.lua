@@ -1,5 +1,5 @@
 local InventoryDebug = true
-local InventoryIntegrationVersion = 'v22-stack-amount-forward'
+local InventoryIntegrationVersion = 'v25-admin-name-delete-contents'
 local OpenedCharacterInventories = {}
 local unpackArgs = table.unpack or unpack
 
@@ -159,6 +159,15 @@ end
 local function getActorAccountId(src)
     local player = CWAdmin.GetCWPlayer and CWAdmin.GetCWPlayer(src) or nil
     return player and tonumber(player.account_id) or nil
+end
+
+
+local function getActorDisplayName(src)
+    src = tonumber(src) or 0
+    if src <= 0 then return 'server console' end
+    local name = GetPlayerName(src)
+    if name and name ~= '' then return name end
+    return ('source %s'):format(src)
 end
 
 local function getCharacterInfo(characterId)
@@ -421,7 +430,7 @@ local function handleAddItemEvent(src, data, origin)
     local characterId = resolveCharacterId(src, data)
     local itemName = normalizeItemName(data.itemName or data.item_name or data.name)
     local amount = math.floor(tonumber(data.amount) or 1)
-    local reason = tostring(data.reason or 'cw-admin inventory panel')
+    local reason = ('Админ: %s'):format(getActorDisplayName(src))
     local metadata = decodeMetadata(data.metadata)
     local target = normalizeTarget(data.target)
 

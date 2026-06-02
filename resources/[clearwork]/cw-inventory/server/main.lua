@@ -1,5 +1,5 @@
 local Config = CWInventoryConfig or {}
-local InventoryServerVersion = 'v22-stacks-split-move'
+local InventoryServerVersion = 'v25-ground-loot-delete-contents'
 
 print(('[cw-inventory] loaded %s'):format(InventoryServerVersion))
 
@@ -37,6 +37,14 @@ if type(Config.DefaultStarterItems) ~= 'table' then
 end
 
 local Locks = {}
+
+-- Временная серверная куча предметов на земле.
+-- Позже это можно вынести в отдельный cw-drops/cw-worlditems и сохранять в БД.
+local GroundDrops = {}
+local NextGroundDropId = 1
+Config.GroundLootRadius = tonumber(Config.GroundLootRadius) or 1.5
+Config.GroundLootWidth = tonumber(Config.GroundLootWidth) or 6
+Config.GroundLootHeight = tonumber(Config.GroundLootHeight) or 8
 
 -- cw-inventory не использует общий скрипт. Справочник предметов живёт отдельно в cw-items,
 -- а инвентарь получает данные только через server exports.
@@ -197,6 +205,119 @@ local function getCharacter(src)
     local characterId = tonumber(player.character.id)
     if not characterId then return nil, nil, 'Сначала выбери персонажа.' end
     return player, characterId, nil
+end
+
+
+local function vectorDistance(a, b)
+    if type(a) ~= 'table' or type(b) ~= 'table' then return 999999.0 end
+    local ax, ay, az = tonumber(a.x) or 0.0, tonumber(a.y) or 0.0, tonumber(a.z) or 0.0
+    local bx, by, bz = tonumber(b.x) or 0.0, tonumber(b.y) or 0.0, tonumber(b.z) or 0.0
+    local dx, dy, dz = ax - bx, ay - by, az - bz
+    return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+local function getSourceCoords(src)
+    src = tonumber(src) or 0
+    if src <= 0 then return nil end
+
+    local ok, ped = pcall(GetPlayerPed, src)
+    if ok and ped and ped ~= 0 then
+        local okCoords, coords = pcall(GetEntityCoords, ped)
+        if okCoords and coords then
+            return { x = coords.x + 0.0, y = coords.y + 0.0, z = coords.z + 0.0 }
+        end
+    end
+
+    return nil
+end
+
+local function packGroundDropsForCoords(coords)
+    local width = math.max(1, tonumber(Config.GroundLootWidth) or 6)
+    local height = math.max(1, tonumber(Config.GroundLootHeight) or 8)
+    local nearby = {}
+
+    for _, drop in pairs(GroundDrops) do
+        if drop and type(drop.item) == 'table' and vectorDistance(coords, drop.coords) <= (Config.GroundLootRadius or 1.5) then
+            nearby[#nearby + 1] = drop
+        end
+    end
+
+    table.sort(nearby, function(a, b) return (a.id or 0) < (b.id or 0) end)
+
+    local occupied = {}
+    local out = {}
+
+    local function isFree(x, y, w, h)
+        if x < 0 or y < 0 or x + w > width or y + h > height then return false end
+        for yy = y, y + h - 1 do
+            for xx = x, x + w - 1 do
+                if occupied[yy .. ':' .. xx] then return false end
+            end
+        end
+        return true
+    end
+
+    local function occupy(x, y, w, h)
+        for yy = y, y + h - 1 do
+            for xx = x, x + w - 1 do
+                occupied[yy .. ':' .. xx] = true
+            end
+        end
+    end
+
+    for _, drop in ipairs(nearby) do
+        local item = copy(drop.item)
+        local w = tonumber(item.width) or 1
+        local h = tonumber(item.height) or 1
+        local placed = false
+        for y = 0, height - 1 do
+            if placed then break end
+            for x = 0, width - 1 do
+                if isFree(x, y, w, h) then
+                    item.drop_id = drop.id
+                    item.ground_id = drop.id
+                    item.id = 'drop_' .. tostring(drop.id)
+                    item.x = x
+                    item.y = y
+                    item.container_id = 'ground'
+                    item.equip_slot = nil
+                    item.is_ground = true
+                    item.from_ground = true
+                    out[#out + 1] = item
+                    occupy(x, y, w, h)
+                    placed = true
+                    break
+                end
+            end
+        end
+    end
+
+    return {
+        id = 'ground',
+        label = 'Земля рядом',
+        width = width,
+        height = height,
+        radius = Config.GroundLootRadius or 1.5,
+        items = out
+    }
+end
+
+local function addGroundDropFromItem(item, coords, src, characterId)
+    if type(item) ~= 'table' then return nil end
+    coords = type(coords) == 'table' and coords or getSourceCoords(src) or { x = 0.0, y = 0.0, z = 0.0 }
+    local dropId = NextGroundDropId
+    NextGroundDropId = NextGroundDropId + 1
+
+    GroundDrops[dropId] = {
+        id = dropId,
+        item = copy(item),
+        coords = { x = tonumber(coords.x) or 0.0, y = tonumber(coords.y) or 0.0, z = tonumber(coords.z) or 0.0 },
+        dropped_by = tonumber(characterId),
+        dropped_source = tonumber(src) or 0,
+        created_at = os.time()
+    }
+
+    return GroundDrops[dropId]
 end
 
 local function characterExists(characterId)
@@ -509,13 +630,20 @@ local function updateSourceStackAfterTake(characterId, sourceItem, takeAmount)
     return true, 'decremented'
 end
 
-local function getState(characterId)
+local function getState(characterId, src)
     characterId = tonumber(characterId)
     ensureState(characterId)
     local items = getItems(characterId)
     local containers, _, equipment = buildContainers(items)
     local equipmentSlots = getEquipmentSlots()
     local definitions = Items.GetClientDefinitions()
+    local ground = nil
+    if src then
+        local coords = getSourceCoords(src)
+        if coords then
+            ground = packGroundDropsForCoords(coords)
+        end
+    end
     local state = {
         character_id = characterId,
         characterId = characterId,
@@ -524,7 +652,8 @@ local function getState(characterId)
         equipmentSlots = equipmentSlots,
         equipment = equipment,
         items = items,
-        definitions = definitions
+        definitions = definitions,
+        ground = ground
     }
     dbg('getState characterId=%s revision=%s containers=%s equipmentSlots=%s items=%s definitions=%s',
         tostring(characterId), tostring(state.revision), tostring(#containers), tostring(#equipmentSlots), tostring(#items), tostring((function(t) local c=0 for _ in pairs(t or {}) do c=c+1 end return c end)(definitions)))
@@ -540,7 +669,7 @@ local function sendState(src, openAfter)
     end
 
     local ok, stateOrErr = pcall(function()
-        return getState(characterId)
+        return getState(characterId, src)
     end)
 
     if not ok then
@@ -863,12 +992,13 @@ local function addItemToCharacterAt(characterId, itemName, amount, metadata, tar
                 { characterId, itemName, enc(metadata), slot })
 
             bumpRevision(characterId)
-            logAction(characterId, actorAccountId, 'admin_add_equip', {
+            logAction(characterId, actorAccountId, reason == 'ground_pickup' and 'pickup_ground_equip' or 'admin_add_equip', {
                 actor_source = actorSource,
                 item_id = insertId,
                 item_name = itemName,
                 amount = 1,
                 to_slot = slot,
+                from_container = reason == 'ground_pickup' and 'Земля' or (reason or 'admin'),
                 before_json = { reason = reason or 'admin_add' },
                 after_json = getItem(characterId, insertId)
             })
@@ -892,12 +1022,13 @@ local function addItemToCharacterAt(characterId, itemName, amount, metadata, tar
             local before = copy(stackTarget)
             MySQL.update.await('UPDATE cw_inventory_items SET amount = amount + ? WHERE id = ? AND character_id = ?', { amount, stackTarget.id, characterId })
             bumpRevision(characterId)
-            logAction(characterId, actorAccountId, 'admin_add_stack', {
+            logAction(characterId, actorAccountId, reason == 'ground_pickup' and 'pickup_ground_stack' or 'admin_add_stack', {
                 actor_source = actorSource,
                 item_id = stackTarget.id,
                 item_name = itemName,
                 amount = amount,
                 to_container = containerId,
+                from_container = reason == 'ground_pickup' and 'Земля' or (reason or 'admin'),
                 before_json = before,
                 after_json = getItem(characterId, stackTarget.id)
             })
@@ -921,7 +1052,7 @@ local function addItemToCharacterAt(characterId, itemName, amount, metadata, tar
             { characterId, itemName, amount, enc(metadata), containerId, math.floor(x), math.floor(y), rotated and 1 or 0 })
 
         bumpRevision(characterId)
-        logAction(characterId, actorAccountId, 'admin_add', {
+        logAction(characterId, actorAccountId, reason == 'ground_pickup' and 'pickup_ground' or 'admin_add', {
             actor_source = actorSource,
             item_id = insertId,
             item_name = itemName,
@@ -988,6 +1119,7 @@ local function moveItemForCharacter(characterId, itemId, target, actorAccountId,
                 from_container = before.container_id,
                 from_slot = before.equip_slot,
                 to_slot = slot,
+                from_container = reason == 'ground_pickup' and 'Земля' or (reason or 'admin'),
                 before_json = before,
                 after_json = after
             })
@@ -1090,6 +1222,30 @@ local function deleteItemFromCharacter(characterId, itemId, actorAccountId, acto
         if not item then return false, 'Предмет не найден.' end
 
         local before = copy(item)
+        local deletedContents = {}
+        local def = Items.Get(item.item_name) or {}
+        local sourceContainerId = nil
+
+        if item.equip_slot and def.container and def.container.id then
+            sourceContainerId = tostring(def.container.id)
+        end
+
+        if sourceContainerId and sourceContainerId ~= '' then
+            local rows = MySQL.query.await('SELECT * FROM cw_inventory_items WHERE character_id = ? AND container_id = ? ORDER BY id ASC', { characterId, sourceContainerId }) or {}
+            for _, row in ipairs(rows) do
+                local nested = normalizeItem(row)
+                if nested then
+                    deletedContents[#deletedContents + 1] = nested
+                end
+            end
+        end
+
+        if #deletedContents > 0 then
+            for _, nested in ipairs(deletedContents) do
+                MySQL.update.await('DELETE FROM cw_inventory_items WHERE id = ? AND character_id = ?', { nested.id, characterId })
+            end
+        end
+
         MySQL.update.await('DELETE FROM cw_inventory_items WHERE id = ? AND character_id = ?', { item.id, characterId })
         bumpRevision(characterId)
 
@@ -1100,10 +1256,19 @@ local function deleteItemFromCharacter(characterId, itemId, actorAccountId, acto
             amount = item.amount,
             from_container = before.container_id,
             from_slot = before.equip_slot,
-            before_json = before,
-            after_json = { deleted = true, reason = reason or 'delete' }
+            before_json = {
+                item = before,
+                container_id = sourceContainerId,
+                contents = deletedContents
+            },
+            after_json = {
+                deleted = true,
+                reason = reason or 'delete',
+                contents_deleted = #deletedContents
+            }
         })
 
+        item.deleted_contents = deletedContents
         return true, item
     end)
 end
@@ -1167,7 +1332,7 @@ RegisterNetEvent('cw-inventory:server:dropItem', function(payload)
     end
 
     local itemId = tonumber(payload.itemId)
-    local coords = type(payload.coords) == 'table' and payload.coords or {}
+    local coords = type(payload.coords) == 'table' and payload.coords or getSourceCoords(src) or {}
     local reason = 'player drop to ground'
     local ok, resultOrMsg = deleteItemFromCharacter(characterId, itemId, player and player.account_id or nil, src, reason, 'drop_ground')
 
@@ -1177,12 +1342,76 @@ RegisterNetEvent('cw-inventory:server:dropItem', function(payload)
         return
     end
 
-    TriggerClientEvent('cw-inventory:client:success', src, 'Предмет выброшен.')
+    local drop = addGroundDropFromItem(resultOrMsg, coords, src, characterId)
+    TriggerClientEvent('cw-inventory:client:success', src, 'Предмет выброшен на землю.')
     TriggerClientEvent('cw-inventory:client:spawnDropBag', src, {
         item = resultOrMsg,
+        drop_id = drop and drop.id,
         coords = coords,
         model = Config.DropBagModel or 'p_bag01x'
     })
+    sendState(src)
+end)
+
+
+RegisterNetEvent('cw-inventory:server:pickupDropItem', function(payload)
+    local src = source
+    payload = type(payload) == 'table' and payload or {}
+
+    local player, characterId, err = getCharacter(src)
+    if err then
+        TriggerClientEvent('cw-inventory:client:error', src, err)
+        return
+    end
+
+    local dropId = tonumber(payload.dropId or payload.drop_id or payload.id)
+    if not dropId or not GroundDrops[dropId] then
+        TriggerClientEvent('cw-inventory:client:error', src, 'Предмета на земле уже нет.')
+        sendState(src)
+        return
+    end
+
+    local coords = getSourceCoords(src)
+    local drop = GroundDrops[dropId]
+    if coords and vectorDistance(coords, drop.coords) > (Config.GroundLootRadius or 1.5) + 0.35 then
+        TriggerClientEvent('cw-inventory:client:error', src, 'Предмет слишком далеко.')
+        sendState(src)
+        return
+    end
+
+    local target = type(payload.target) == 'table' and payload.target or {}
+    local item = drop.item or {}
+    local available = math.max(1, math.floor(tonumber(item.amount) or 1))
+    local amount = math.max(1, math.floor(tonumber(payload.amount) or available))
+    if amount > available then amount = available end
+
+    local itemCopy = copy(item)
+    itemCopy.amount = amount
+
+    local ok, resultOrMsg = addItemToCharacterAt(
+        characterId,
+        itemCopy.item_name,
+        amount,
+        itemCopy.metadata or {},
+        target,
+        player and player.account_id or nil,
+        src,
+        'ground_pickup'
+    )
+
+    if not ok then
+        TriggerClientEvent('cw-inventory:client:error', src, resultOrMsg or 'Не удалось поднять предмет.')
+        sendState(src)
+        return
+    end
+
+    if amount >= available then
+        GroundDrops[dropId] = nil
+    else
+        drop.item.amount = available - amount
+    end
+
+    TriggerClientEvent('cw-inventory:client:success', src, 'Предмет поднят.')
     sendState(src)
 end)
 

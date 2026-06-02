@@ -2,7 +2,7 @@
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; font-family: Georgia, serif; background: transparent; color: #d8d0bd; }
 .hidden { display: none !important; }
 #app { width: 100vw; height: 100vh; background: radial-gradient(circle at center, rgba(0,0,0,.25), rgba(0,0,0,.92)); display: flex; align-items: center; justify-content: center; }
-.inventory-shell { width: 1280px; height: 860px; max-width: 96vw; max-height: 94vh; background: linear-gradient(180deg, rgba(30,30,28,.98), rgba(12,12,12,.98)); border: 2px solid #615947; box-shadow: 0 0 0 1px #111 inset, 0 25px 80px rgba(0,0,0,.8); padding: 22px; }
+.inventory-shell { width: 1500px; height: 860px; max-width: 98vw; max-height: 94vh; background: linear-gradient(180deg, rgba(30,30,28,.98), rgba(12,12,12,.98)); border: 2px solid #615947; box-shadow: 0 0 0 1px #111 inset, 0 25px 80px rgba(0,0,0,.8); padding: 22px; }
 .topbar { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #615947; padding-bottom: 14px; margin-bottom: 10px; }
 .eyebrow { color: #9a8f73; letter-spacing: 5px; font-size: 12px; }
 h1, h2 { margin: 0; text-transform: uppercase; letter-spacing: 2px; }
@@ -15,8 +15,8 @@ button:hover { background: #343127; }
 #notice { min-height: 26px; color: #c8a968; font-weight: bold; padding: 2px 0 8px; }
 #notice.error { color: #e07a60; }
 #notice.success { color: #82c87c; }
-.layout { display: grid; grid-template-columns: 330px 1fr; gap: 18px; height: calc(100% - 96px); }
-.equipment-panel, .containers-panel { border: 1px solid #615947; background: rgba(0,0,0,.22); padding: 16px; overflow: auto; }
+.layout { display: grid; grid-template-columns: 330px minmax(0, 1fr) 310px; gap: 18px; height: calc(100% - 96px); }
+.equipment-panel, .containers-panel, .ground-panel { border: 1px solid #615947; background: rgba(0,0,0,.22); padding: 16px; overflow: auto; }
 .equipment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
 .equip-slot { min-height: 86px; border: 1px solid #4e493c; background: rgba(255,255,255,.035); padding: 8px; position: relative; }
 .equip-slot:hover { outline: 1px solid #9a8f73; }
@@ -63,3 +63,18 @@ button:hover { background: #343127; }
 .equip-item { position: relative; min-height: 26px; display: flex; align-items: center; justify-content: center; padding-right: 18px; }
 .equip-item .item-name { width: 100%; text-align: center; }
 .item-drag-ghost-label { text-align: center; }
+
+
+/* v25 ground loot panel */
+.ground-panel { min-width: 0; }
+.ground { display: flex; flex-direction: column; gap: 12px; }
+.ground-box { border: 1px solid #4e493c; background: rgba(255,255,255,.025); padding: 12px; }
+.ground-grid { position: relative; display: grid; gap: 0; background: #111; border: 1px solid #615947; width: max-content; max-width: 100%; overflow: hidden; }
+.ground-cell { width: 48px; height: 48px; border-right: 1px solid #353127; border-bottom: 1px solid #353127; background: rgba(255,255,255,.025); }
+.ground-item { position: absolute; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #87795d; background: linear-gradient(180deg, rgba(84,78,62,.94), rgba(43,40,32,.96)); color: #f1dfaa; padding: 4px; cursor: grab; overflow: hidden; text-align: center; user-select: none; }
+.ground-item:hover { outline: 2px solid #d2b36f; box-shadow: 0 0 18px rgba(210,179,111,.25); }
+.ground-item.dragging-source { opacity: .30 !important; filter: grayscale(.25); }
+.ground-item .item-name { position: absolute; left: 3px; right: 3px; top: 3px; bottom: 14px; display: flex; align-items: center; justify-content: center; text-align: center; max-height: none; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; hyphens: auto; font-size: 13px; font-weight: bold; line-height: 1.08; }
+.ground-empty { margin-top: 10px; color: #8c826d; font-style: italic; font-size: 13px; }
+.ground-help { margin-top: 12px; }
+@media (max-width: 1250px) { .layout { grid-template-columns: 300px minmax(0, 1fr); } .ground-panel { display: none; } }
