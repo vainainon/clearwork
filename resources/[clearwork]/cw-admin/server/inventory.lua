@@ -512,16 +512,8 @@ local function handleAddItemEvent(src, data, origin)
     end
 
     OpenedCharacterInventories[src] = characterId
-
-    if CWAdmin.AdminLog then
-        CWAdmin.AdminLog(src, 'inventory_add_item', {
-            character_id = characterId,
-            item_name = itemName,
-            amount = amount,
-            target = target,
-            reason = reason,
-        })
-    end
+    -- v27: inventory actions are already logged in cw_inventory_logs.
+    -- Do not duplicate them into cw-admin AdminLog.
 
     sendInventorySuccess(src, ('Выдано: %s x%s.'):format(itemName, amount))
     sendInventoryPayload(src, characterId)
@@ -588,15 +580,7 @@ local function handleMoveItemEvent(src, data, origin)
     end
 
     OpenedCharacterInventories[src] = characterId
-
-    if CWAdmin.AdminLog then
-        CWAdmin.AdminLog(src, 'inventory_move_item', {
-            character_id = characterId,
-            item_id = itemId,
-            target = target,
-            reason = reason,
-        })
-    end
+    -- v27: inventory move is logged only in cw_inventory_logs.
 
     sendInventorySuccess(src, 'Предмет перемещён.')
     sendInventoryPayload(src, characterId)
@@ -655,14 +639,7 @@ local function handleDeleteItemEvent(src, data, origin)
     end
 
     OpenedCharacterInventories[src] = characterId
-
-    if CWAdmin.AdminLog then
-        CWAdmin.AdminLog(src, 'inventory_delete_item', {
-            character_id = characterId,
-            item_id = itemId,
-            reason = reason,
-        })
-    end
+    -- v27: inventory delete is logged only in cw_inventory_logs.
 
     sendInventorySuccess(src, 'Предмет удалён.')
     sendInventoryPayload(src, characterId)

@@ -2,7 +2,7 @@
     'use strict';
 
     var DEBUG = true;
-    var INVENTORY_JS_VERSION = 'v26-admin-readable-cells-delete-log';
+    var INVENTORY_JS_VERSION = 'v27-admin-readable-cells-single-log';
     var CELL = 48;
 
     var lastCharacters = [];

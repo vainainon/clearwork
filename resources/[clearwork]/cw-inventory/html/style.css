@@ -70,7 +70,7 @@ button:hover { background: #343127; }
 .ground { display: flex; flex-direction: column; gap: 12px; }
 .ground-box { border: 1px solid #4e493c; background: rgba(255,255,255,.025); padding: 12px; }
 .ground-grid { position: relative; display: grid; gap: 0; background: #111; border: 1px solid #615947; width: max-content; max-width: 100%; overflow: hidden; }
-.ground-cell { width: 48px; height: 48px; border-right: 1px solid #353127; border-bottom: 1px solid #353127; background: rgba(255,255,255,.025); }
+.ground-cell { width: 38px; height: 38px; border-right: 1px solid #353127; border-bottom: 1px solid #353127; background: rgba(255,255,255,.025); }
 .ground-item { position: absolute; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1px solid #87795d; background: linear-gradient(180deg, rgba(84,78,62,.94), rgba(43,40,32,.96)); color: #f1dfaa; padding: 4px; cursor: grab; overflow: hidden; text-align: center; user-select: none; }
 .ground-item:hover { outline: 2px solid #d2b36f; box-shadow: 0 0 18px rgba(210,179,111,.25); }
 .ground-item.dragging-source { opacity: .30 !important; filter: grayscale(.25); }
@@ -120,3 +120,12 @@ button:hover { background: #343127; }
     background: rgba(210,179,111,.18);
     box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
 }
+
+
+/* v27: ground panel fits inside right column */
+.ground-panel { overflow-x: hidden; }
+.ground-box { max-width: 100%; overflow: hidden; }
+.ground-grid { max-width: 100%; }
+.ground-cell { width: 38px; height: 38px; }
+.ground-item .item-name { font-size: 12px; line-height: 1.0; padding: 2px 3px 13px; }
+.ground-item .item-meta { font-size: 11px; line-height: 12px; }

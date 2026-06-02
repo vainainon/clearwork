@@ -10,8 +10,9 @@
     var groundEl = document.getElementById('ground');
     var selectionInfo = document.getElementById('selectionInfo');
 
-    var APP_VERSION = 'v26-ground-target-drop';
+    var APP_VERSION = 'v27-ground-fit-stable-logs';
     var CELL = 48;
+    var GROUND_CELL = 38;
     var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {}, ground: null };
     var selected = null;
     var selectedRotated = false;
@@ -319,8 +320,8 @@
         if (!grid) return null;
 
         var rect = grid.getBoundingClientRect();
-        var cx = Math.floor((x - rect.left) / CELL);
-        var cy = Math.floor((y - rect.top) / CELL);
+        var cx = Math.floor((x - rect.left) / GROUND_CELL);
+        var cy = Math.floor((y - rect.top) / GROUND_CELL);
         if (cx < 0 || cy < 0) return null;
         return grid.querySelector('.ground-cell[data-x="' + cx + '"][data-y="' + cy + '"]');
     }
@@ -543,10 +544,10 @@
             if (item.container_id !== container.id || item.equip_slot) return;
             var el = document.createElement('div');
             el.className = 'grid-item ' + escapeHtml(item.type || '');
-            el.style.left = (Number(item.x || 0) * CELL) + 'px';
-            el.style.top = (Number(item.y || 0) * CELL) + 'px';
-            el.style.width = (Number(item.width || 1) * CELL) + 'px';
-            el.style.height = (Number(item.height || 1) * CELL) + 'px';
+            el.style.left = (Number(item.x || 0) * GROUND_CELL) + 'px';
+            el.style.top = (Number(item.y || 0) * GROUND_CELL) + 'px';
+            el.style.width = (Number(item.width || 1) * GROUND_CELL) + 'px';
+            el.style.height = (Number(item.height || 1) * GROUND_CELL) + 'px';
             el.title = itemLabel(item) + '\n' + (item.description || '');
             el.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                 '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) : '') + '</div>';
@@ -580,10 +581,10 @@
         box.innerHTML = '<div class="container-head"><h2>' + escapeHtml(ground.label || 'Земля') + '</h2><span>' + escapeHtml(w) + 'x' + escapeHtml(h) + '</span></div>';
         var grid = document.createElement('div');
         grid.className = 'ground-grid';
-        grid.style.gridTemplateColumns = 'repeat(' + w + ', ' + CELL + 'px)';
-        grid.style.gridTemplateRows = 'repeat(' + h + ', ' + CELL + 'px)';
-        grid.style.width = (w * CELL) + 'px';
-        grid.style.height = (h * CELL) + 'px';
+        grid.style.gridTemplateColumns = 'repeat(' + w + ', ' + GROUND_CELL + 'px)';
+        grid.style.gridTemplateRows = 'repeat(' + h + ', ' + GROUND_CELL + 'px)';
+        grid.style.width = (w * GROUND_CELL) + 'px';
+        grid.style.height = (h * GROUND_CELL) + 'px';
         for (var yy = 0; yy < h; yy++) {
             for (var xx = 0; xx < w; xx++) {
                 var cell = document.createElement('div');
@@ -596,10 +597,10 @@
         (ground.items || []).forEach(function (item) {
             var el = document.createElement('div');
             el.className = 'ground-item ' + escapeHtml(item.type || '');
-            el.style.left = (Number(item.x || 0) * CELL) + 'px';
-            el.style.top = (Number(item.y || 0) * CELL) + 'px';
-            el.style.width = (Number(item.width || 1) * CELL) + 'px';
-            el.style.height = (Number(item.height || 1) * CELL) + 'px';
+            el.style.left = (Number(item.x || 0) * GROUND_CELL) + 'px';
+            el.style.top = (Number(item.y || 0) * GROUND_CELL) + 'px';
+            el.style.width = (Number(item.width || 1) * GROUND_CELL) + 'px';
+            el.style.height = (Number(item.height || 1) * GROUND_CELL) + 'px';
             el.title = itemLabel(item) + '\n' + (item.description || '');
             el.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                 '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) : '') + '</div>';
