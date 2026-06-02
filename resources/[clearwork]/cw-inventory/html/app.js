@@ -9,6 +9,7 @@
     var containersEl = document.getElementById('containers');
     var selectionInfo = document.getElementById('selectionInfo');
 
+    var APP_VERSION = 'v18-drag-ghost-grid';
     var CELL = 48;
     var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {} };
     var selected = null;
@@ -88,6 +89,32 @@
         return { w: w, h: h };
     }
 
+    function visualSizeForItem(item, rotatedOverride) {
+        var def = getDef(item || {});
+        var w = Number((item && (item.width || item.base_width || item.w)) || def.width || 1) || 1;
+        var h = Number((item && (item.height || item.base_height || item.h)) || def.height || 1) || 1;
+        var rotated = rotatedOverride;
+        if (rotated === undefined || rotated === null) rotated = !!(item && item.rotated);
+        if (rotated) {
+            var tmp = w;
+            w = h;
+            h = tmp;
+        }
+        return { w: Math.max(1, w), h: Math.max(1, h) };
+    }
+
+    function fillItemDragGhost(el, item) {
+        var size = visualSizeForItem(item, !!selectedRotated);
+        var label = itemLabel(item) + (Number(item.amount || 1) > 1 ? ' x' + item.amount : '');
+        el.style.width = (size.w * CELL) + 'px';
+        el.style.height = (size.h * CELL) + 'px';
+        el.innerHTML = '' +
+            '<div class="item-drag-ghost-grid" style="grid-template-columns: repeat(' + size.w + ', ' + CELL + 'px); grid-template-rows: repeat(' + size.h + ', ' + CELL + 'px);">' +
+                Array(size.w * size.h + 1).join('<div class="item-drag-ghost-cell"></div>') +
+            '</div>' +
+            '<div class="item-drag-ghost-label">' + escapeHtml(label) + '</div>';
+    }
+
     function updateSelectionInfo() {
         var item = selectedItem();
         if (!item) {
@@ -157,18 +184,11 @@
 
         if (!dragGhost) {
             dragGhost = document.createElement('div');
-            dragGhost.style.position = 'fixed';
-            dragGhost.style.zIndex = '999999';
-            dragGhost.style.pointerEvents = 'none';
-            dragGhost.style.border = '1px solid #87795d';
-            dragGhost.style.background = 'rgba(43,40,32,.96)';
-            dragGhost.style.color = '#f1dfaa';
-            dragGhost.style.padding = '7px 10px';
-            dragGhost.style.minWidth = '150px';
-            dragGhost.style.boxShadow = '0 4px 12px rgba(0,0,0,.35)';
-            dragGhost.textContent = itemLabel(item) + (Number(item.amount || 1) > 1 ? ' x' + item.amount : '');
+            dragGhost.className = 'item-drag-ghost';
             document.body.appendChild(dragGhost);
         }
+
+        fillItemDragGhost(dragGhost, item);
 
         dragGhost.style.left = (x + 12) + 'px';
         dragGhost.style.top = (y + 12) + 'px';
@@ -371,6 +391,8 @@
             render();
         }
     });
+
+    if (window.console && console.log) console.log('[cw-inventory:nui] loaded ' + APP_VERSION);
 
     window.addEventListener('message', function (event) {
         var data = event.data || {};
