@@ -1,7 +1,41 @@
 local Config = CWInventoryConfig or {}
+
+-- Защитный fallback: инвентарь должен иметь базовые контейнеры/слоты даже если
+-- RedM не подхватил server/config.lua после копирования файлов без refresh.
+Config.OpenCommand = Config.OpenCommand or 'inventory'
+Config.Debug = Config.Debug == true
+
+if type(Config.BaseContainers) ~= 'table' then
+    Config.BaseContainers = {
+        pockets = { label = 'Карманы', width = 4, height = 2, order = 10 },
+        belt = { label = 'Пояс', width = 3, height = 1, order = 20 }
+    }
+end
+
+if type(Config.EquipmentSlots) ~= 'table' then
+    Config.EquipmentSlots = {
+        { id = 'hat', label = 'Головной убор', accepts = { clothing_hat = true }, order = 10 },
+        { id = 'coat', label = 'Верхняя одежда', accepts = { clothing_coat = true }, order = 20 },
+        { id = 'shirt', label = 'Рубаха', accepts = { clothing_shirt = true }, order = 25 },
+        { id = 'pants', label = 'Штаны', accepts = { clothing_pants = true }, order = 30 },
+        { id = 'boots', label = 'Обувь', accepts = { clothing_boots = true }, order = 40 },
+        { id = 'vest', label = 'Разгрузка', accepts = { clothing_vest = true }, order = 50 },
+        { id = 'holster_left', label = 'Кобура Л', accepts = { weapon_revolver = true, weapon_pistol = true }, order = 60 },
+        { id = 'holster_right', label = 'Кобура П', accepts = { weapon_revolver = true, weapon_pistol = true }, order = 70 },
+        { id = 'back_long_1', label = 'Двуручное 1', accepts = { weapon_longarm = true }, order = 80 },
+        { id = 'back_long_2', label = 'Двуручное 2', accepts = { weapon_longarm = true }, order = 90 },
+        { id = 'accessory_1', label = 'Украшение 1', accepts = { accessory = true }, order = 100 },
+        { id = 'accessory_2', label = 'Украшение 2', accepts = { accessory = true }, order = 110 }
+    }
+end
+
+if type(Config.DefaultStarterItems) ~= 'table' then
+    Config.DefaultStarterItems = {}
+end
+
 local Locks = {}
 
--- cw-inventory не грузит shared-скрипты. Справочник предметов живёт отдельно в cw-items,
+-- cw-inventory не использует общий скрипт. Справочник предметов живёт отдельно в cw-items,
 -- а инвентарь получает данные только через server exports.
 local Items = {}
 
@@ -634,6 +668,103 @@ local function addItemToCharacter(characterId, itemName, amount, metadata, actor
     end)
 end
 
+
+local function addItemToCharacterAt(characterId, itemName, amount, metadata, target, actorAccountId, actorSource, reason)
+    characterId = tonumber(characterId)
+    itemName = tostring(itemName or '')
+    amount = math.floor(tonumber(amount) or 1)
+    metadata = metadata or {}
+    target = type(target) == 'table' and target or {}
+
+    if not characterId then return false, 'Некорректный ID персонажа.' end
+    if amount < 1 then amount = 1 end
+
+    local def = Items.Get(itemName)
+    if not def then return false, 'Такого предмета нет в cw-items.' end
+
+    ensureState(characterId)
+
+    local targetType = tostring(target.type or '')
+    local slot = tostring(target.slot or target.equip_slot or '')
+    local containerId = tostring(target.containerId or target.container_id or '')
+    local x = tonumber(target.x)
+    local y = tonumber(target.y)
+
+    if targetType ~= 'slot' and slot == '' and (containerId == '' or x == nil or y == nil) then
+        return addItemToCharacter(characterId, itemName, amount, metadata, actorAccountId, actorSource, reason)
+    end
+
+    return withLock(characterId, function()
+        local stackMax = math.max(1, tonumber(def.stack) or 1)
+
+        if targetType == 'slot' or slot ~= '' then
+            if slot == '' then return false, 'Некорректный слот экипировки.' end
+            if amount ~= 1 then return false, 'В слот экипировки можно выдать только 1 предмет.' end
+
+            local tempItem = {
+                item_name = itemName,
+                type = def.type or 'item',
+                amount = 1
+            }
+
+            if not canEquipToSlot(tempItem, slot) then
+                return false, 'Этот предмет нельзя положить в этот слот.'
+            end
+
+            local occupied = MySQL.scalar.await('SELECT id FROM cw_inventory_items WHERE character_id = ? AND equip_slot = ? LIMIT 1', { characterId, slot })
+            if occupied then
+                return false, 'Слот уже занят.'
+            end
+
+            local insertId = MySQL.insert.await([[INSERT INTO cw_inventory_items
+                (character_id, item_name, amount, metadata, container_id, x, y, rotated, equip_slot)
+                VALUES (?, ?, 1, ?, NULL, NULL, NULL, 0, ?)]],
+                { characterId, itemName, enc(metadata), slot })
+
+            bumpRevision(characterId)
+            logAction(characterId, actorAccountId, 'admin_add_equip', {
+                actor_source = actorSource,
+                item_id = insertId,
+                item_name = itemName,
+                amount = 1,
+                to_slot = slot,
+                before_json = { reason = reason or 'admin_add' },
+                after_json = getItem(characterId, insertId)
+            })
+
+            return true
+        end
+
+        local rotated = target.rotated == true or target.rotated == 1
+
+        if amount > stackMax then
+            return false, ('Максимум для одного слота: %s.'):format(stackMax)
+        end
+
+        local tempItem = { item_name = itemName }
+        local ok, msg = canPlace(characterId, tempItem, containerId, x, y, rotated, -1)
+        if not ok then return false, msg end
+
+        local insertId = MySQL.insert.await([[INSERT INTO cw_inventory_items
+            (character_id, item_name, amount, metadata, container_id, x, y, rotated, equip_slot)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)]],
+            { characterId, itemName, amount, enc(metadata), containerId, math.floor(x), math.floor(y), rotated and 1 or 0 })
+
+        bumpRevision(characterId)
+        logAction(characterId, actorAccountId, 'admin_add', {
+            actor_source = actorSource,
+            item_id = insertId,
+            item_name = itemName,
+            amount = amount,
+            to_container = containerId,
+            before_json = { reason = reason or 'admin_add' },
+            after_json = getItem(characterId, insertId)
+        })
+
+        return true
+    end)
+end
+
 local function openInventoryForSource(src, reason)
     src = tonumber(src) or 0
     if src <= 0 then return end
@@ -648,8 +779,7 @@ local function openInventoryForSource(src, reason)
     end
 end
 
--- Команда есть на сервере, чтобы /cwinv из чата гарантированно открывал инвентарь.
--- Client-side команда оставлена как дополнительный путь, но без обязательной RegisterKeyMapping.
+-- Обычная игровая команда без префикса cw. Админские команды остаются в cw-admin.
 RegisterCommand(Config.OpenCommand or 'inventory', function(src)
     openInventoryForSource(src, 'server_command')
 end, false)
@@ -702,6 +832,11 @@ end)
 exports('AddItemToCharacter', function(characterId, itemName, amount, metadata, actorSource, actorAccountId, reason)
     -- Только server-side API для доверенных ресурсов. Права здесь не проверяются специально.
     return addItemToCharacter(tonumber(characterId), itemName, amount, metadata or {}, actorAccountId, actorSource, reason or 'resource_export')
+end)
+
+exports('AddItemToCharacterAt', function(characterId, itemName, amount, metadata, target, actorSource, actorAccountId, reason)
+    -- Только server-side API для доверенных ресурсов. Права здесь не проверяются специально.
+    return addItemToCharacterAt(tonumber(characterId), itemName, amount, metadata or {}, target or {}, actorAccountId, actorSource, reason or 'resource_export')
 end)
 
 exports('GetItemDefinitions', function()

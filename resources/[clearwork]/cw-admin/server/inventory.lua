@@ -48,6 +48,25 @@ local function decodeMetadata(raw)
     return nil
 end
 
+local function trim(value)
+    value = tostring(value or '')
+    return (value:gsub('^%s+', ''):gsub('%s+$', ''))
+end
+
+local function normalizeItemName(raw)
+    local value = trim(raw)
+    if value == '' then return '' end
+
+    -- Защита от старого UI/кэша, если вместо value прилетает строка вида "Бинт — bandage".
+    local afterDash = value:match('[—%-]%s*([%w_%-]+)%s*$')
+    if afterDash and afterDash ~= '' then
+        value = afterDash
+    end
+
+    value = value:gsub('[^%w_%-]', '')
+    return value
+end
+
 local function loadInventoryPayload(characterId)
     local okState, stateOrErr = callInventoryExport('GetInventoryState', characterId)
     if not okState then return nil, stateOrErr end
@@ -110,10 +129,11 @@ RegisterNetEvent('cw-admin:server:inventory:addItem', function(data)
 
     data = data or {}
     local characterId = tonumber(data.characterId)
-    local itemName = tostring(data.itemName or '')
+    local itemName = normalizeItemName(data.itemName)
     local amount = math.floor(tonumber(data.amount) or 1)
     local reason = tostring(data.reason or 'cw-admin')
     local metadata = decodeMetadata(data.metadata)
+    local target = type(data.target) == 'table' and data.target or nil
 
     if not characterId then
         sendInventoryError(src, 'Некорректный ID персонажа.')
@@ -141,16 +161,33 @@ RegisterNetEvent('cw-admin:server:inventory:addItem', function(data)
         return
     end
 
-    local ok, result, err = callInventoryExport(
-        'AddItemToCharacter',
-        characterId,
-        itemName,
-        amount,
-        metadata,
-        src,
-        getActorAccountId(src),
-        reason
-    )
+    local exportName = target and 'AddItemToCharacterAt' or 'AddItemToCharacter'
+    local ok, result, err
+
+    if target then
+        ok, result, err = callInventoryExport(
+            exportName,
+            characterId,
+            itemName,
+            amount,
+            metadata,
+            target,
+            src,
+            getActorAccountId(src),
+            reason
+        )
+    else
+        ok, result, err = callInventoryExport(
+            exportName,
+            characterId,
+            itemName,
+            amount,
+            metadata,
+            src,
+            getActorAccountId(src),
+            reason
+        )
+    end
 
     if not ok then
         sendInventoryError(src, 'Ошибка экспорта инвентаря: ' .. tostring(result))
@@ -166,6 +203,7 @@ RegisterNetEvent('cw-admin:server:inventory:addItem', function(data)
         character_id = characterId,
         item_name = itemName,
         amount = amount,
+        target = target,
         reason = reason
     })
 

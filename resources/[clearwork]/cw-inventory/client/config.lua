@@ -1,6 +1,6 @@
 CWInventoryConfig = CWInventoryConfig or {}
 
-CWInventoryConfig.OpenCommand = 'cwinv'
+CWInventoryConfig.OpenCommand = 'inventory'
 CWInventoryConfig.OpenKey = 'I'
 CWInventoryConfig.Debug = false
 

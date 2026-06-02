@@ -1,6 +1,6 @@
 CWInventoryConfig = CWInventoryConfig or {}
 
-CWInventoryConfig.OpenCommand = 'cwinv'
+CWInventoryConfig.OpenCommand = 'inventory'
 CWInventoryConfig.Debug = false
 
 -- Размер клетки NUI. Серверу нужен только для передачи состояния, клиент рисует через CSS/JS.
