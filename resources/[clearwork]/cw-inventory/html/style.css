@@ -1,0 +1,41 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; font-family: Georgia, serif; background: transparent; color: #d8d0bd; }
+.hidden { display: none !important; }
+#app { width: 100vw; height: 100vh; background: radial-gradient(circle at center, rgba(0,0,0,.25), rgba(0,0,0,.92)); display: flex; align-items: center; justify-content: center; }
+.inventory-shell { width: 1280px; height: 860px; max-width: 96vw; max-height: 94vh; background: linear-gradient(180deg, rgba(30,30,28,.98), rgba(12,12,12,.98)); border: 2px solid #615947; box-shadow: 0 0 0 1px #111 inset, 0 25px 80px rgba(0,0,0,.8); padding: 22px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #615947; padding-bottom: 14px; margin-bottom: 10px; }
+.eyebrow { color: #9a8f73; letter-spacing: 5px; font-size: 12px; }
+h1, h2 { margin: 0; text-transform: uppercase; letter-spacing: 2px; }
+h1 { font-size: 34px; color: #e6dbc0; }
+h2 { font-size: 20px; color: #e6dbc0; }
+button { border: 1px solid #615947; background: #211f1b; color: #e6dbc0; font-family: Georgia, serif; text-transform: uppercase; letter-spacing: 2px; padding: 11px 14px; cursor: pointer; }
+button:hover { background: #343127; }
+#closeBtn { width: 44px; height: 44px; font-size: 28px; line-height: 18px; background: #44110d; }
+.top-actions { display: flex; gap: 8px; align-items: center; }
+#notice { min-height: 26px; color: #c8a968; font-weight: bold; padding: 2px 0 8px; }
+#notice.error { color: #e07a60; }
+#notice.success { color: #82c87c; }
+.layout { display: grid; grid-template-columns: 330px 1fr; gap: 18px; height: calc(100% - 96px); }
+.equipment-panel, .containers-panel { border: 1px solid #615947; background: rgba(0,0,0,.22); padding: 16px; overflow: auto; }
+.equipment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.equip-slot { min-height: 86px; border: 1px solid #4e493c; background: rgba(255,255,255,.035); padding: 8px; position: relative; }
+.equip-slot:hover { outline: 1px solid #9a8f73; }
+.slot-title { color: #9a8f73; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
+.equip-item, .grid-item { border: 1px solid #87795d; background: linear-gradient(180deg, rgba(84,78,62,.94), rgba(43,40,32,.96)); color: #f1dfaa; padding: 6px; cursor: pointer; overflow: hidden; user-select: none; }
+.equip-item.selected, .grid-item.selected { outline: 2px solid #d2b36f; box-shadow: 0 0 18px rgba(210,179,111,.25); }
+.item-name { font-size: 13px; font-weight: bold; line-height: 1.1; }
+.item-meta { position: absolute; right: 5px; bottom: 3px; font-size: 12px; color: #e6dbc0; opacity: .9; }
+.help-box { margin-top: 16px; border: 1px solid #4e493c; background: rgba(255,255,255,.035); color: #bfb59b; line-height: 1.45; padding: 12px; font-size: 13px; }
+.panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 12px; }
+#selectionInfo { color: #bfb59b; font-size: 14px; text-align: right; }
+.containers { display: flex; flex-direction: column; gap: 18px; padding-bottom: 20px; }
+.container-box { border: 1px solid #4e493c; background: rgba(255,255,255,.025); padding: 12px; }
+.container-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: #bfb59b; }
+.grid-wrap { position: relative; display: grid; gap: 0; background: #111; border: 1px solid #615947; width: max-content; }
+.cell { width: 48px; height: 48px; border-right: 1px solid #353127; border-bottom: 1px solid #353127; background: rgba(255,255,255,.025); }
+.cell:hover { background: rgba(210,179,111,.16); }
+.grid-item { position: absolute; z-index: 5; display: flex; flex-direction: column; justify-content: space-between; }
+.grid-item.weapon_revolver, .grid-item.weapon_longarm { background: linear-gradient(180deg, rgba(70,55,42,.98), rgba(32,25,20,.98)); }
+.grid-item.clothing_hat, .grid-item.clothing_coat, .grid-item.clothing_vest, .grid-item.clothing_pants, .grid-item.clothing_boots, .grid-item.clothing_shirt { background: linear-gradient(180deg, rgba(54,62,64,.96), rgba(26,33,35,.96)); }
+.empty-slot { color: #575143; font-size: 12px; font-style: italic; }
+@media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } .inventory-shell { overflow: auto; } }

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ClearWork Inventory</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div id="app" class="hidden">
+        <div class="inventory-shell">
+            <div class="topbar">
+                <div>
+                    <div class="eyebrow">CLEARWORK</div>
+                    <h1>Инвентарь</h1>
+                </div>
+                <div class="top-actions">
+                    <button id="refreshBtn">Обновить</button>
+                    <button id="closeBtn">×</button>
+                </div>
+            </div>
+
+            <div id="notice"></div>
+
+            <div class="layout">
+                <aside class="equipment-panel">
+                    <h2>Персонаж</h2>
+                    <div id="equipment" class="equipment-grid"></div>
+                    <div class="help-box">
+                        <b>Управление:</b><br />
+                        Клик по предмету — выбрать.<br />
+                        Клик по клетке — переместить.<br />
+                        Клик по слоту одежды/оружия — экипировать.<br />
+                        R — повернуть выбранный предмет.<br />
+                        ПКМ — снять выбор.
+                    </div>
+                </aside>
+
+                <main class="containers-panel">
+                    <div class="panel-head">
+                        <h2>Вместимость</h2>
+                        <div id="selectionInfo">Ничего не выбрано</div>
+                    </div>
+                    <div id="containers" class="containers"></div>
+                </main>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
