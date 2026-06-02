@@ -1,4 +1,8 @@
 local DEFAULT_CHANCE = 15
+local ROULETTE_COUNTDOWN_SECONDS = 5
+local DOWNED_SECONDS = 300
+
+local activeKnockdowns = {}
 
 local function ClampChance(value)
     value = tonumber(value) or DEFAULT_CHANCE
@@ -8,6 +12,17 @@ local function ClampChance(value)
     if value > 100 then value = 100 end
 
     return value
+end
+
+local function NormalizeCoords(coords)
+    coords = coords or {}
+
+    return {
+        x = tonumber(coords.x) or 0.0,
+        y = tonumber(coords.y) or 0.0,
+        z = tonumber(coords.z) or 0.0,
+        heading = tonumber(coords.heading) or 0.0
+    }
 end
 
 local function EnsureSchema()
@@ -65,42 +80,41 @@ local function GetCWPlayer(src)
 end
 
 local function SaveCharacterPosition(src, coords)
-    if not coords then return end
+    coords = NormalizeCoords(coords)
 
     pcall(function()
-        exports['cw-core']:SaveCharacterPosition(src, {
-            x = tonumber(coords.x),
-            y = tonumber(coords.y),
-            z = tonumber(coords.z),
-            heading = tonumber(coords.heading) or 0.0
-        })
+        exports['cw-core']:SaveCharacterPosition(src, coords)
     end)
 end
 
 local function SetCharacterPermadead(src, characterId, coords)
+    coords = NormalizeCoords(coords)
+
+    -- ВАЖНО: в таблице characters колонка называется heading, не pos_heading.
     MySQL.update.await([[
         UPDATE characters
         SET is_dead = 1,
             pos_x = ?,
             pos_y = ?,
             pos_z = ?,
-            pos_heading = ?
+            heading = ?
         WHERE id = ?
     ]], {
-        tonumber(coords.x),
-        tonumber(coords.y),
-        tonumber(coords.z),
-        tonumber(coords.heading) or 0.0,
+        coords.x,
+        coords.y,
+        coords.z,
+        coords.heading,
         tonumber(characterId)
     })
 
     local player = GetCWPlayer(src)
+
     if player and player.character then
         player.character.is_dead = 1
-        player.character.pos_x = tonumber(coords.x)
-        player.character.pos_y = tonumber(coords.y)
-        player.character.pos_z = tonumber(coords.z)
-        player.character.pos_heading = tonumber(coords.heading) or 0.0
+        player.character.pos_x = coords.x
+        player.character.pos_y = coords.y
+        player.character.pos_z = coords.z
+        player.character.heading = coords.heading
     end
 end
 
@@ -115,51 +129,116 @@ RegisterNetEvent('cw-death:server:knockdown', function(coords)
     local player = GetCWPlayer(src)
 
     if not player or not player.character then
+        activeKnockdowns[src] = nil
         TriggerClientEvent('cw-death:client:cancelKnockdown', src)
         return
     end
 
-    coords = coords or {}
-    coords.x = tonumber(coords.x) or 0.0
-    coords.y = tonumber(coords.y) or 0.0
-    coords.z = tonumber(coords.z) or 0.0
-    coords.heading = tonumber(coords.heading) or 0.0
-
+    coords = NormalizeCoords(coords)
     SaveCharacterPosition(src, coords)
 
     local characterId = tonumber(player.character.id)
-    local alreadyDead = tonumber(player.character.is_dead) == 1
 
-    if alreadyDead then
-        TriggerClientEvent('cw-death:client:rollResult', src, {
-            chance = 100,
-            roll = 1,
-            permadeath = true,
-            seconds = 300,
-            alreadyDead = true
-        })
-
+    if not characterId then
+        activeKnockdowns[src] = nil
+        TriggerClientEvent('cw-death:client:cancelKnockdown', src)
         return
     end
 
-    local chance = GetPermadeathChance()
+    local alreadyDead = tonumber(player.character.is_dead) == 1
+    local chance = alreadyDead and 100 or GetPermadeathChance()
+
+    activeKnockdowns[src] = {
+        characterId = characterId,
+        coords = coords,
+        chance = chance,
+        alreadyDead = alreadyDead,
+        rolled = false
+    }
+
+    TriggerClientEvent('cw-death:client:roulettePrepared', src, {
+        chance = chance,
+        countdown = ROULETTE_COUNTDOWN_SECONDS,
+        seconds = DOWNED_SECONDS,
+        alreadyDead = alreadyDead
+    })
+end)
+
+RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
+    local src = source
+    local state = activeKnockdowns[src]
+
+    if not state or state.rolled then
+        return
+    end
+
+    local player = GetCWPlayer(src)
+
+    if not player or not player.character then
+        activeKnockdowns[src] = nil
+        TriggerClientEvent('cw-death:client:cancelKnockdown', src)
+        return
+    end
+
+    state.rolled = true
+
+    if coords then
+        state.coords = NormalizeCoords(coords)
+        SaveCharacterPosition(src, state.coords)
+    end
+
+    local chance = ClampChance(state.chance)
     local roll = math.random(1, 100)
     local permadeath = roll <= chance
 
-    if permadeath then
-        SetCharacterPermadead(src, characterId, coords)
+    if state.alreadyDead then
+        chance = 100
+        roll = 1
+        permadeath = true
+    end
+
+    local ok, err = pcall(function()
+        if permadeath then
+            SetCharacterPermadead(src, state.characterId, state.coords)
+        end
+    end)
+
+    if not ok then
+        print(('[cw-death] Failed to set permadeath for character %s: %s'):format(
+            tostring(state.characterId),
+            tostring(err)
+        ))
+
+        activeKnockdowns[src] = nil
+
+        TriggerClientEvent('cw-death:client:rollResult', src, {
+            chance = chance,
+            roll = roll,
+            permadeath = false,
+            seconds = DOWNED_SECONDS,
+            error = true
+        })
+
+        return
     end
 
     TriggerClientEvent('cw-death:client:rollResult', src, {
         chance = chance,
         roll = roll,
         permadeath = permadeath,
-        seconds = 300
+        seconds = DOWNED_SECONDS,
+        alreadyDead = state.alreadyDead == true
     })
+
+    activeKnockdowns[src] = nil
 end)
 
 RegisterNetEvent('cw-death:server:saveDownedPosition', function(coords)
     SaveCharacterPosition(source, coords)
+end)
+
+AddEventHandler('playerDropped', function()
+    activeKnockdowns[source] = nil
 end)
 
 exports('GetPermadeathChance', GetPermadeathChance)

@@ -6,11 +6,64 @@
 </head>
 <body>
     <div id="deathRoot" class="hidden">
-        <div class="death-card">
-            <div id="spinner" class="spinner"></div>
-            <h1 id="title">Рулетка судьбы</h1>
-            <p id="text">Идёт бросок...</p>
-            <div id="timer"></div>
+        <div class="death-panel">
+            <div class="death-header">
+                <div class="small">CLEARWORK FRONTIER</div>
+                <h1 id="title">Колесо судьбы</h1>
+                <p id="subtitle">Салунная рулетка решит, останется ли персонаж в живых.</p>
+            </div>
+
+            <div class="death-layout">
+                <div class="wheel-wrap">
+                    <div class="pointer">
+                        <span></span>
+                    </div>
+
+                    <div id="wheel" class="wheel">
+                        <div class="wheel-face">
+                            <div class="wheel-label label-top">01</div>
+                            <div class="wheel-label label-right">25</div>
+                            <div class="wheel-label label-bottom">50</div>
+                            <div class="wheel-label label-left">75</div>
+
+                            <div class="hub">
+                                <span>БРОСОК</span>
+                                <strong id="rollValue">—</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="death-info">
+                    <div class="wanted-card">
+                        <div class="wanted-title">WANTED</div>
+                        <div class="wanted-name">ЖИВЫМ ИЛИ МЁРТВЫМ</div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat">
+                            <span>Шанс смерти</span>
+                            <strong id="chanceValue">—</strong>
+                        </div>
+
+                        <div class="stat">
+                            <span>До рулетки</span>
+                            <strong id="countdownValue">5</strong>
+                        </div>
+                    </div>
+
+                    <p id="text" class="death-text">
+                        Персонаж ранен. До вращения колеса осталось несколько секунд.
+                    </p>
+
+                    <div id="timer" class="timer"></div>
+                </div>
+            </div>
+
+            <div class="death-footer">
+                <span id="footerLeft">Красная зона — перманентная смерть.</span>
+                <span id="footerRight">1–100</span>
+            </div>
         </div>
     </div>
 

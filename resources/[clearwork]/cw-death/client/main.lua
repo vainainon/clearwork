@@ -1,11 +1,19 @@
 local DOWNED_SECONDS = 300
+local ROULETTE_COUNTDOWN_SECONDS = 5
 
 local isDowned = false
 local waitingRoll = false
+local rollRequested = false
 local permanentDead = false
+
 local downedUntil = 0
+local rouletteCountdownUntil = 0
 local downCoords = nil
+local currentChance = nil
+
 local nextPositionSave = 0
+local nextUiTick = 0
+local nextRagdollTick = 0
 
 local function DisableSpawnManagerAutoSpawn()
     if GetResourceState('spawnmanager') == 'started' then
@@ -60,7 +68,9 @@ local function SafeResurrect(coords, health)
 end
 
 local function IsPedDead(ped)
-    if IsEntityDead(ped) then return true end
+    if IsEntityDead(ped) then
+        return true
+    end
 
     if type(IsPedFatallyInjured) == 'function' and IsPedFatallyInjured(ped) then
         return true
@@ -82,10 +92,14 @@ local function ShowUi(action, payload)
 end
 
 local function EndKnockdown()
-    if permanentDead then return end
+    if permanentDead then
+        return
+    end
 
     isDowned = false
     waitingRoll = false
+    rollRequested = false
+    currentChance = nil
 
     SetInvincible(false)
     SafeResurrect(downCoords or GetCurrentCoords(), 200)
@@ -96,21 +110,32 @@ local function EndKnockdown()
 end
 
 local function BeginKnockdown()
-    if isDowned or waitingRoll then return end
+    if isDowned or waitingRoll then
+        return
+    end
 
     DisableSpawnManagerAutoSpawn()
 
     downCoords = GetCurrentCoords()
     isDowned = true
     waitingRoll = true
+    rollRequested = false
     permanentDead = false
-    downedUntil = GetGameTimer() + (DOWNED_SECONDS * 1000)
+    currentChance = nil
+
+    downedUntil = 0
+    rouletteCountdownUntil = GetGameTimer() + (ROULETTE_COUNTDOWN_SECONDS * 1000)
+
     nextPositionSave = 0
+    nextUiTick = 0
+    nextRagdollTick = 0
 
     SetInvincible(true)
     SafeResurrect(downCoords, 101)
 
-    ShowUi('roulette:start', {
+    ShowUi('roulette:prepare', {
+        chance = nil,
+        countdown = ROULETTE_COUNTDOWN_SECONDS,
         seconds = DOWNED_SECONDS
     })
 
@@ -136,61 +161,106 @@ end)
 CreateThread(function()
     while true do
         if isDowned then
-            local ped = PlayerPedId()
             local now = GetGameTimer()
+            local ped = PlayerPedId()
 
             DisableAllControlActions(0)
             SetInvincible(true)
 
-            if IsPedDead(ped) then
-                SafeResurrect(downCoords or GetCurrentCoords(), 101)
-                ped = PlayerPedId()
+            if now >= nextRagdollTick then
+                if IsPedDead(ped) then
+                    SafeResurrect(downCoords or GetCurrentCoords(), 101)
+                    ped = PlayerPedId()
+                end
+
+                SetEntityHealth(ped, 101)
+
+                if type(SetPedToRagdoll) == 'function' then
+                    SetPedToRagdoll(ped, 1200, 1200, 0, true, true, false)
+                end
+
+                nextRagdollTick = now + 1000
             end
 
-            SetEntityHealth(ped, 101)
+            if now >= nextUiTick then
+                if waitingRoll then
+                    local leftToRoll = math.max(0, math.ceil((rouletteCountdownUntil - now) / 1000))
 
-            if type(SetPedToRagdoll) == 'function' then
-                SetPedToRagdoll(ped, 1000, 1000, 0, true, true, false)
+                    ShowUi('roulette:countdownTick', {
+                        chance = currentChance,
+                        seconds = leftToRoll
+                    })
+
+                    if not rollRequested and leftToRoll <= 0 then
+                        rollRequested = true
+
+                        ShowUi('roulette:spin', {
+                            chance = currentChance
+                        })
+
+                        TriggerServerEvent('cw-death:server:rollRoulette', downCoords or GetCurrentCoords())
+                    end
+                else
+                    local left = permanentDead and 0 or math.max(0, math.ceil((downedUntil - now) / 1000))
+
+                    ShowUi('downed:tick', {
+                        seconds = left,
+                        permanent = permanentDead
+                    })
+
+                    if not permanentDead and downedUntil > 0 and now >= downedUntil then
+                        EndKnockdown()
+                    end
+                end
+
+                nextUiTick = now + 300
             end
-
-            local left = math.max(0, math.ceil((downedUntil - now) / 1000))
-
-            ShowUi('downed:tick', {
-                seconds = left,
-                permanent = permanentDead
-            })
 
             if now >= nextPositionSave then
                 TriggerServerEvent('cw-death:server:saveDownedPosition', downCoords or GetCurrentCoords())
                 nextPositionSave = now + 15000
             end
 
-            if not permanentDead and not waitingRoll and now >= downedUntil then
-                EndKnockdown()
-            end
-
-            Wait(500)
+            Wait(0)
         else
             Wait(500)
         end
     end
 end)
 
+RegisterNetEvent('cw-death:client:roulettePrepared', function(data)
+    data = data or {}
+
+    currentChance = tonumber(data.chance) or 0
+
+    local countdown = tonumber(data.countdown) or ROULETTE_COUNTDOWN_SECONDS
+    rouletteCountdownUntil = GetGameTimer() + (countdown * 1000)
+
+    ShowUi('roulette:prepare', {
+        chance = currentChance,
+        countdown = countdown,
+        seconds = tonumber(data.seconds) or DOWNED_SECONDS,
+        alreadyDead = data.alreadyDead == true
+    })
+end)
+
 RegisterNetEvent('cw-death:client:rollResult', function(data)
     data = data or {}
 
     waitingRoll = false
+    rollRequested = false
     permanentDead = data.permadeath == true
+    currentChance = tonumber(data.chance) or currentChance or 0
 
-    if data.seconds then
-        downedUntil = GetGameTimer() + (tonumber(data.seconds) * 1000)
-    end
+    local seconds = tonumber(data.seconds) or DOWNED_SECONDS
+    downedUntil = GetGameTimer() + (seconds * 1000)
 
     ShowUi('roulette:result', {
-        chance = tonumber(data.chance) or 0,
+        chance = currentChance,
         roll = tonumber(data.roll) or 0,
         permanent = permanentDead,
-        seconds = math.max(0, math.ceil((downedUntil - GetGameTimer()) / 1000))
+        seconds = seconds,
+        alreadyDead = data.alreadyDead == true
     })
 
     if permanentDead then
@@ -201,7 +271,9 @@ end)
 RegisterNetEvent('cw-death:client:cancelKnockdown', function()
     isDowned = false
     waitingRoll = false
+    rollRequested = false
     permanentDead = false
+    currentChance = nil
 
     SetInvincible(false)
     ShowUi('downed:hide')
@@ -212,7 +284,9 @@ RegisterNetEvent('cw-death:client:adminRevive', function(coords)
 
     isDowned = false
     waitingRoll = false
+    rollRequested = false
     permanentDead = false
+    currentChance = nil
 
     SetInvincible(false)
     SafeResurrect(downCoords, 200)
