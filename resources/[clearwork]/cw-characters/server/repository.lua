@@ -1,15 +1,33 @@
 CWCharacters = CWCharacters or {}
+
 local Config = CWCharactersConfig
 
 local function Trim(value)
     return tostring(value or ''):gsub('^%s+', ''):gsub('%s+$', '')
 end
 
-local function GetCurrentCharacterId(player)
-    if type(player) ~= 'table' or type(player.character) ~= 'table' then
-        return nil
+local function IsDeadFlag(value)
+    if value == true then return true end
+    if value == 1 then return true end
+
+    if type(value) == 'string' then
+        local normalized = value:lower()
+        return normalized == '1' or normalized == 'true' or normalized == 'yes'
     end
 
+    return tonumber(value) == 1
+end
+
+function CWCharacters.IsDeadFlag(value)
+    return IsDeadFlag(value)
+end
+
+function CWCharacters.NormalizeDeadFlag(value)
+    return IsDeadFlag(value) and 1 or 0
+end
+
+local function GetCurrentCharacterId(player)
+    if type(player) ~= 'table' or type(player.character) ~= 'table' then return nil end
     return tonumber(player.character.id)
 end
 
@@ -18,9 +36,7 @@ function CWCharacters.GetCWPlayer(src)
         return exports['cw-core']:GetPlayer(src)
     end)
 
-    if ok and player then
-        return player
-    end
+    if ok and player then return player end
 
     pcall(function()
         player = exports['cw-core']:LoadOrCreateAccount(src)
@@ -84,10 +100,12 @@ function CWCharacters.SendCharacters(src, playerOrAccountId)
     local characters = CWCharacters.GetCharacters(accountId)
 
     for _, character in ipairs(characters) do
+        local dead = IsDeadFlag(character.is_dead)
+
         character.is_current = currentCharacterId ~= nil and tonumber(character.id) == currentCharacterId
         character.active_character = character.is_current
-        character.is_dead = tonumber(character.is_dead) or 0
-        character.was_revived = character.revived_at ~= nil
+        character.is_dead = dead and 1 or 0
+        character.was_revived = character.revived_at ~= nil and not dead
     end
 
     TriggerClientEvent('cw-characters:client:receiveCharacters', src, characters, currentCharacterId)
@@ -98,15 +116,11 @@ function CWCharacters.GetFreeSlot(characters)
 
     for _, character in ipairs(characters or {}) do
         local slot = tonumber(character.slot)
-        if slot then
-            usedSlots[slot] = true
-        end
+        if slot then usedSlots[slot] = true end
     end
 
     for slot = 1, tonumber(Config.MaxCharacters) or 3 do
-        if not usedSlots[slot] then
-            return slot
-        end
+        if not usedSlots[slot] then return slot end
     end
 
     return nil

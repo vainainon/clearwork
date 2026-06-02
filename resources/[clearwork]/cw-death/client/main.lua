@@ -5,10 +5,12 @@ local isDowned = false
 local waitingRoll = false
 local rollRequested = false
 local permanentDead = false
+
 local downedUntil = 0
 local rouletteCountdownUntil = 0
 local downCoords = nil
 local currentChance = nil
+
 local nextPositionSave = 0
 local nextUiTick = 0
 local nextRagdollTick = 0
@@ -46,19 +48,16 @@ local function SetInvincible(state)
 end
 
 local function IsPedDead(ped)
-    if IsEntityDead(ped) then
-        return true
-    end
-
-    if type(IsPedFatallyInjured) == 'function' and IsPedFatallyInjured(ped) then
-        return true
-    end
-
+    if IsEntityDead(ped) then return true end
+    if type(IsPedFatallyInjured) == 'function' and IsPedFatallyInjured(ped) then return true end
     return false
 end
 
 local function IsSwitchBlocked()
-    return isDowned or waitingRoll or permanentDead
+    -- Для /chars блокируем только активный нокдаун и вращение рулетки.
+    -- Финальный пермакилл не блокирует меню: игрок должен иметь возможность выбрать другого персонажа
+    -- или создать нового. Сам убитый персонаж блокируется сервером cw-characters.
+    return waitingRoll or (isDowned and not permanentDead)
 end
 
 local function ResetDeathState(hideUi)
@@ -83,8 +82,8 @@ local function EndKnockdown()
     if permanentDead then return end
 
     local coords = downCoords or GetCurrentCoords()
-    ResetDeathState(true)
 
+    ResetDeathState(true)
     TriggerEvent('cw-spawn:client:respawnHere', coords)
     ClearPedTasksImmediately(PlayerPedId())
     TriggerServerEvent('cw-death:server:saveDownedPosition', coords)
@@ -132,7 +131,6 @@ CreateThread(function()
 
         if not isDowned and not waitingRoll and not permanentDead then
             local ped = PlayerPedId()
-
             if ped and ped ~= 0 and DoesEntityExist(ped) and IsPedDead(ped) then
                 BeginKnockdown()
             end
@@ -154,7 +152,6 @@ CreateThread(function()
             if now >= nextRagdollTick then
                 if ped and ped ~= 0 then
                     SetEntityHealth(ped, 101)
-
                     if type(SetPedToRagdoll) == 'function' then
                         SetPedToRagdoll(ped, 1200, 1200, 0, true, true, false)
                     end
@@ -174,11 +171,7 @@ CreateThread(function()
 
                     if not rollRequested and leftToRoll <= 0 then
                         rollRequested = true
-
-                        ShowUi('roulette:spin', {
-                            chance = currentChance
-                        })
-
+                        ShowUi('roulette:spin', { chance = currentChance })
                         TriggerServerEvent('cw-death:server:rollRoulette', downCoords or GetCurrentCoords())
                     end
                 else
@@ -211,7 +204,6 @@ end)
 
 RegisterNetEvent('cw-death:client:roulettePrepared', function(data)
     data = data or {}
-
     currentChance = tonumber(data.chance) or 0
 
     local countdown = tonumber(data.countdown) or ROULETTE_COUNTDOWN_SECONDS
@@ -262,6 +254,17 @@ RegisterNetEvent('cw-death:client:adminRevive', function(coords)
     TriggerEvent('cw-spawn:client:respawnHere', downCoords)
     ClearPedTasksImmediately(PlayerPedId())
     TriggerServerEvent('cw-death:server:saveDownedPosition', downCoords)
+end)
+
+RegisterNetEvent('cw-death:client:characterMenuOpened', function()
+    if permanentDead and not waitingRoll then
+        isDowned = false
+        rollRequested = false
+        downedUntil = 0
+        SetNuiFocus(false, false)
+        SetNuiFocusKeepInput(false)
+        ShowUi('downed:hide')
+    end
 end)
 
 AddEventHandler('cw-spawn:client:spawnFinished', function()

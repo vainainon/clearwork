@@ -1,9 +1,23 @@
 local Config = CWCharactersConfig
 
-local function IsDeathLocked(src)
-    if GetResourceState('cw-death') ~= 'started' then
-        return false
+local function IsDeadFlag(value)
+    if CWCharacters and CWCharacters.IsDeadFlag then
+        return CWCharacters.IsDeadFlag(value)
     end
+
+    if value == true then return true end
+    if value == 1 then return true end
+
+    if type(value) == 'string' then
+        local normalized = value:lower()
+        return normalized == '1' or normalized == 'true' or normalized == 'yes'
+    end
+
+    return tonumber(value) == 1
+end
+
+local function IsDeathSwitchLocked(src)
+    if GetResourceState('cw-death') ~= 'started' then return false end
 
     local ok, locked = pcall(function()
         return exports['cw-death']:IsPlayerDeathLocked(src)
@@ -16,7 +30,7 @@ local function SendOpenBlocked(src)
     TriggerClientEvent(
         'cw-characters:client:openFailed',
         src,
-        'Смена персонажа недоступна: текущий персонаж ранен или убит.'
+        'Смена персонажа недоступна: текущий персонаж ранен или идёт рулетка.'
     )
 end
 
@@ -41,7 +55,10 @@ RegisterNetEvent('cw-characters:server:openCharacterMenu', function(coords)
         return
     end
 
-    if player.character and IsDeathLocked(src) then
+    -- Блокируем только активный нокдаун/рулетку.
+    -- После финального пермакилла игрок должен иметь возможность выбрать другого персонажа
+    -- или создать нового. Выбор самого убитого персонажа всё равно блокируется ниже.
+    if player.character and IsDeathSwitchLocked(src) then
         SendOpenBlocked(src)
         return
     end
@@ -56,10 +73,10 @@ end)
 RegisterNetEvent('cw-characters:server:createCharacter', function(data)
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
-
     if not player or type(data) ~= 'table' then return end
 
     local characters = CWCharacters.GetCharacters(player.account_id)
+
     if #characters >= (tonumber(Config.MaxCharacters) or 3) then
         TriggerClientEvent('cw-characters:client:createFailed', src, 'Максимум 3 персонажа.')
         return
@@ -111,7 +128,6 @@ RegisterNetEvent('cw-characters:server:createCharacter', function(data)
             tostring(player.account_id),
             tostring(characterId)
         ))
-
         TriggerClientEvent('cw-characters:client:createFailed', src, 'Не удалось создать персонажа. Попробуй ещё раз.')
         CWCharacters.SendCharacters(src, player)
         return
@@ -130,15 +146,20 @@ end)
 RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(characterId)
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
-
     if not player then return end
 
     characterId = tonumber(characterId)
     if not characterId then return end
 
     local character = MySQL.single.await([[
-        SELECT id, firstname, lastname, created_at, delete_requested_at, is_dead,
-               TIMESTAMPDIFF(DAY, created_at, NOW()) AS age_days
+        SELECT
+            id,
+            firstname,
+            lastname,
+            created_at,
+            delete_requested_at,
+            is_dead,
+            TIMESTAMPDIFF(DAY, created_at, NOW()) AS age_days
         FROM characters
         WHERE id = ? AND account_id = ?
         LIMIT 1
@@ -149,7 +170,7 @@ RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(charact
         return
     end
 
-    local isDead = tonumber(character.is_dead) == 1
+    local isDead = IsDeadFlag(character.is_dead)
     local isCurrent = player.character and tonumber(player.character.id) == characterId
 
     if isCurrent and not isDead then
@@ -191,15 +212,16 @@ end)
 RegisterNetEvent('cw-characters:server:cancelDeleteCharacter', function(characterId)
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
-
     if not player then return end
 
     characterId = tonumber(characterId)
     if not characterId then return end
 
     local character = MySQL.single.await([[
-        SELECT id, delete_requested_at,
-               TIMESTAMPDIFF(MINUTE, delete_requested_at, NOW()) AS delete_minutes_passed
+        SELECT
+            id,
+            delete_requested_at,
+            TIMESTAMPDIFF(MINUTE, delete_requested_at, NOW()) AS delete_minutes_passed
         FROM characters
         WHERE id = ? AND account_id = ?
         LIMIT 1
@@ -231,7 +253,6 @@ end)
 RegisterNetEvent('cw-characters:server:selectCharacter', function(payload)
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
-
     if not player then return end
 
     local characterId = nil
@@ -246,8 +267,10 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(payload)
 
     if not characterId then return end
 
-    if player.character and IsDeathLocked(src) then
-        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Смена персонажа недоступна: текущий персонаж ранен или убит.')
+    -- Во время нокдауна/рулетки переключаться нельзя.
+    -- После уже случившегося пермакилла переключение на другого живого персонажа разрешено.
+    if player.character and IsDeathSwitchLocked(src) then
+        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Смена персонажа недоступна: текущий персонаж ранен или идёт рулетка.')
         CWCharacters.SendCharacters(src, player)
         return
     end
@@ -262,14 +285,19 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(payload)
         return
     end
 
-    if character.delete_requested_at then
-        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Персонаж ожидает удаления.')
+    local selectedIsDead = IsDeadFlag(character.is_dead)
+    character.is_dead = selectedIsDead and 1 or 0
+
+    -- Проверка мёртвого персонажа должна быть раньше проверки "это уже текущий".
+    -- Иначе текущий убитый персонаж визуально выглядит как выбранный и его можно снова открыть.
+    if selectedIsDead then
+        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Персонаж убит. Его нельзя выбрать, пока администрация не снимет пермакилл.')
         CWCharacters.SendCharacters(src, player)
         return
     end
 
-    if tonumber(character.is_dead) == 1 then
-        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Персонаж убит. Его нельзя выбрать, пока администрация не снимет пермакилл.')
+    if character.delete_requested_at then
+        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Персонаж ожидает удаления.')
         CWCharacters.SendCharacters(src, player)
         return
     end
@@ -288,7 +316,6 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(payload)
             'UPDATE characters SET revived_at = NULL WHERE id = ? AND account_id = ?',
             { characterId, player.account_id }
         )
-
         character.revived_at = nil
         character.was_revived = false
     end
@@ -310,7 +337,6 @@ end)
 RegisterNetEvent('cw-characters:server:clearSelectedCharacter', function()
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
-
     if not player then return end
 
     exports['cw-core']:ClearCharacter(src)

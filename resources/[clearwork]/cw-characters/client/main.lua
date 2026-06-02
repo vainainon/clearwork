@@ -24,15 +24,19 @@ local function Notify(message)
 end
 
 local function IsDeathSwitchBlocked()
-    if GetResourceState('cw-death') ~= 'started' then
-        return false
-    end
+    if GetResourceState('cw-death') ~= 'started' then return false end
 
     local ok, locked = pcall(function()
         return exports['cw-death']:IsSwitchBlocked()
     end)
 
     return ok and locked == true
+end
+
+local function NotifyDeathMenuOpened()
+    if GetResourceState('cw-death') ~= 'started' then return end
+
+    TriggerEvent('cw-death:client:characterMenuOpened')
 end
 
 local function SetPedHiddenInCharacterMenu(state)
@@ -78,9 +82,7 @@ local function ApplyBasicAppearance(character)
 
     if character.skin then
         local ok, decoded = pcall(json.decode, character.skin)
-        if ok and type(decoded) == 'table' then
-            skin = decoded
-        end
+        if ok and type(decoded) == 'table' then skin = decoded end
     end
 
     local ped = PlayerPedId()
@@ -99,7 +101,6 @@ end
 
 local function OpenUI()
     uiOpen = true
-
     SetNuiFocus(true, true)
     SetNuiFocusKeepInput(false)
 
@@ -118,7 +119,6 @@ end
 
 local function CloseUI(unhidePed)
     uiOpen = false
-
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
 
@@ -141,10 +141,14 @@ end
 local function OpenCharacterMenu()
     DisableSpawnManagerAutoSpawn()
 
+    -- Блок только во время активного нокдауна/рулетки.
+    -- Если персонаж уже получил пермакилл, меню открываем: игрок должен выбрать другого или создать нового.
     if characterSelected and IsDeathSwitchBlocked() then
-        Notify('Смена персонажа недоступна: текущий персонаж ранен или убит.')
+        Notify('Смена персонажа недоступна: текущий персонаж ранен или идёт рулетка.')
         return
     end
+
+    NotifyDeathMenuOpened()
 
     local firstMenu = not characterSelected
     hidePedForCurrentMenu = firstMenu
@@ -152,11 +156,9 @@ local function OpenCharacterMenu()
     if firstMenu then
         DoScreenFadeOut(200)
         Wait(250)
-
         TriggerEvent('cw-spawn:client:prepareCharacterMenu', true)
         Wait(600)
         SetPedHiddenInCharacterMenu(true)
-
         RequestCharacters(false)
         Wait(250)
         DoScreenFadeIn(400)
@@ -168,7 +170,6 @@ end
 
 CreateThread(function()
     DisableSpawnManagerAutoSpawn()
-
     Wait(tonumber(Config.AutoOpenDelay) or 5000)
 
     if not firstOpenDone then
@@ -257,7 +258,7 @@ end)
 
 RegisterNUICallback('selectCharacter', function(data, cb)
     if IsDeathSwitchBlocked() then
-        Notify('Смена персонажа недоступна: текущий персонаж ранен или убит.')
+        Notify('Смена персонажа недоступна: текущий персонаж ранен или идёт рулетка.')
         cb({ ok = false })
         return
     end

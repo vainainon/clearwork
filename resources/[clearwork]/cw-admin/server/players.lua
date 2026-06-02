@@ -2,6 +2,30 @@ local Config = CWAdminConfig
 
 CWAdmin.FrozenPlayers = CWAdmin.FrozenPlayers or {}
 
+local function IsDeadFlag(value)
+    if value == true then return true end
+    if value == 1 then return true end
+
+    if type(value) == 'string' then
+        local normalized = value:lower()
+        return normalized == '1' or normalized == 'true' or normalized == 'yes'
+    end
+
+    return tonumber(value) == 1
+end
+
+local function GetDatabaseDeadFlag(characterId)
+    characterId = tonumber(characterId)
+    if not characterId then return nil end
+
+    local ok, value = pcall(function()
+        return MySQL.scalar.await('SELECT is_dead FROM characters WHERE id = ? LIMIT 1', { characterId })
+    end)
+
+    if not ok then return nil end
+    return IsDeadFlag(value)
+end
+
 function CWAdmin.GetOnlinePlayers()
     local players = {}
 
@@ -12,7 +36,6 @@ function CWAdmin.GetOnlinePlayers()
             local cwPlayer = CWAdmin.GetCWPlayer(targetSrc)
             local roleData = CWAdmin.GetRoleData(targetSrc)
             local ped = GetPlayerPed(targetSrc)
-
             local coords = {
                 x = 0.0,
                 y = 0.0,
@@ -30,12 +53,22 @@ function CWAdmin.GetOnlinePlayers()
 
             local character = nil
             if cwPlayer and cwPlayer.character then
+                local characterId = tonumber(cwPlayer.character.id)
+                local dbDead = GetDatabaseDeadFlag(characterId)
+                local dead = dbDead
+
+                if dead == nil then
+                    dead = IsDeadFlag(cwPlayer.character.is_dead)
+                end
+
+                cwPlayer.character.is_dead = dead and 1 or 0
+
                 character = {
-                    id = cwPlayer.character.id,
+                    id = characterId,
                     firstname = cwPlayer.character.firstname,
                     lastname = cwPlayer.character.lastname,
                     slot = cwPlayer.character.slot,
-                    is_dead = tonumber(cwPlayer.character.is_dead) or 0,
+                    is_dead = dead and 1 or 0,
                     revived_at = cwPlayer.character.revived_at
                 }
             end

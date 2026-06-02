@@ -4,6 +4,18 @@ local DOWNED_SECONDS = 300
 
 local activeKnockdowns = {}
 
+local function IsDeadFlag(value)
+    if value == true then return true end
+    if value == 1 then return true end
+
+    if type(value) == 'string' then
+        local normalized = value:lower()
+        return normalized == '1' or normalized == 'true' or normalized == 'yes'
+    end
+
+    return tonumber(value) == 1
+end
+
 local function ClampChance(value)
     value = tonumber(value) or DEFAULT_CHANCE
     value = math.floor(value)
@@ -105,30 +117,29 @@ local function IsCharacterPermadead(characterId)
         { characterId }
     )
 
-    return tonumber(value) == 1
+    return IsDeadFlag(value)
 end
 
 local function IsPlayerDeathLocked(src)
     src = tonumber(src)
     if not src then return false end
 
-    if activeKnockdowns[src] ~= nil then
-        return true
-    end
+    -- Этот экспорт используется меню персонажей как блок переключения.
+    -- Блокировать надо только активный нокдаун/рулетку, а не уже случившийся пермакилл.
+    return activeKnockdowns[src] ~= nil
+end
+
+local function IsPlayerPermanentlyDead(src)
+    src = tonumber(src)
+    if not src then return false end
 
     local player = GetCWPlayer(src)
-    if not player or not player.character then
-        return false
-    end
+    if not player or not player.character then return false end
 
-    if tonumber(player.character.is_dead) == 1 then
-        return true
-    end
+    if IsDeadFlag(player.character.is_dead) then return true end
 
     local characterId = tonumber(player.character.id)
-    if not characterId then
-        return false
-    end
+    if not characterId then return false end
 
     return IsCharacterPermadead(characterId)
 end
@@ -136,7 +147,6 @@ end
 local function SetCharacterPermadead(src, characterId, coords)
     coords = NormalizeCoords(coords)
     characterId = tonumber(characterId)
-
     if not characterId then return false end
 
     local affected = MySQL.update.await([[
@@ -189,7 +199,7 @@ RegisterNetEvent('cw-death:server:knockdown', function(coords)
         return
     end
 
-    local alreadyDead = tonumber(player.character.is_dead) == 1 or IsCharacterPermadead(characterId)
+    local alreadyDead = IsDeadFlag(player.character.is_dead) or IsCharacterPermadead(characterId)
     local chance = alreadyDead and 100 or GetPermadeathChance()
 
     activeKnockdowns[src] = {
@@ -211,10 +221,7 @@ end)
 RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
     local src = source
     local state = activeKnockdowns[src]
-
-    if not state or state.rolled then
-        return
-    end
+    if not state or state.rolled then return end
 
     local player = GetCWPlayer(src)
     if not player or not player.character then
@@ -243,9 +250,7 @@ RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
     local ok, err = pcall(function()
         if permadeath then
             local saved = SetCharacterPermadead(src, state.characterId, state.coords)
-            if not saved then
-                error('database update returned 0 affected rows')
-            end
+            if not saved then error('database update returned 0 affected rows') end
         end
     end)
 
@@ -280,3 +285,4 @@ exports('GetPermadeathChance', GetPermadeathChance)
 exports('SetPermadeathChance', SetPermadeathChance)
 exports('IsCharacterPermadead', IsCharacterPermadead)
 exports('IsPlayerDeathLocked', IsPlayerDeathLocked)
+exports('IsPlayerPermanentlyDead', IsPlayerPermanentlyDead)

@@ -1,5 +1,17 @@
 local Config = CWAdminConfig
 
+local function IsDeadFlag(value)
+    if value == true then return true end
+    if value == 1 then return true end
+
+    if type(value) == 'string' then
+        local normalized = value:lower()
+        return normalized == '1' or normalized == 'true' or normalized == 'yes'
+    end
+
+    return tonumber(value) == 1
+end
+
 local function ClampChance(value)
     value = tonumber(value) or 15
     value = math.floor(value)
@@ -128,7 +140,7 @@ local function IsCharacterPermadead(characterId)
         { characterId }
     )
 
-    return tonumber(value) == 1
+    return IsDeadFlag(value)
 end
 
 local function RefreshAdminData(src)
@@ -199,7 +211,10 @@ RegisterNetEvent('cw-admin:server:medical:revivePlayer', function(target)
         return
     end
 
-    if tonumber(player.character.is_dead) == 1 or IsCharacterPermadead(characterId) then
+    -- Важно: проверяем не только память cw-core, но и БД.
+    -- oxmysql может вернуть TINYINT(1) как boolean true, поэтому tonumber(true) не работает.
+    if IsDeadFlag(player.character.is_dead) or IsCharacterPermadead(characterId) then
+        player.character.is_dead = 1
         CWAdmin.SendError(src, 'У персонажа перма-килл. Сначала сними пермакилл во вкладке Персонажи кнопкой "Снять пермакилл / оживить".')
         return
     end
@@ -243,6 +258,8 @@ RegisterNetEvent('cw-admin:server:medical:reviveCharacter', function(characterId
         return
     end
 
+    local wasDead = IsDeadFlag(character.is_dead)
+
     local affected = MySQL.update.await([[
         UPDATE characters
         SET is_dead = 0,
@@ -261,13 +278,14 @@ RegisterNetEvent('cw-admin:server:medical:reviveCharacter', function(characterId
         onlinePlayer.character.revived_at = os.date('%Y-%m-%d %H:%M:%S')
 
         local coords = GetServerCoords(onlineSrc) or GetCharacterCoords(character)
+
         TriggerClientEvent('cw-death:client:adminRevive', onlineSrc, coords)
         SaveCharacterPosition(onlineSrc, coords)
     end
 
     CWAdmin.AdminLog(src, 'revive_character', {
         character = characterId,
-        was_dead = tonumber(character.is_dead) == 1
+        was_dead = wasDead
     })
 
     CWAdmin.SendSuccess(src, 'Пермакилл снят. Если игрок онлайн, он возрождён на этом же персонаже.')

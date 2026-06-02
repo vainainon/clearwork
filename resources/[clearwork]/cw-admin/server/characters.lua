@@ -1,5 +1,17 @@
 local Config = CWAdminConfig
 
+local function IsDeadFlag(value)
+    if value == true then return true end
+    if value == 1 then return true end
+
+    if type(value) == 'string' then
+        local normalized = value:lower()
+        return normalized == '1' or normalized == 'true' or normalized == 'yes'
+    end
+
+    return tonumber(value) == 1
+end
+
 function CWAdmin.GetActiveCharacters()
     local activeCharacters = {}
 
@@ -42,10 +54,7 @@ function CWAdmin.GetTotalCharacters()
         return MySQL.scalar.await('SELECT COUNT(*) FROM characters')
     end)
 
-    if not ok then
-        return 0
-    end
-
+    if not ok then return 0 end
     return tonumber(result) or 0
 end
 
@@ -58,6 +67,7 @@ local function DecorateCharacters(characters)
         local characterId = tonumber(character.id)
         local activeData = characterId and activeCharacters[characterId] or nil
 
+        character.is_dead = IsDeadFlag(character.is_dead) and 1 or 0
         character.active_character = activeData ~= nil
 
         if activeData then
@@ -74,7 +84,6 @@ end
 
 function CWAdmin.SearchCharacters(query)
     query = tostring(query or '')
-
     local limit = tonumber(Config.MaxCharacterSearchResults) or 100
     local characters
 
@@ -125,25 +134,16 @@ function CWAdmin.SearchCharacters(query)
                 a.steam
             FROM characters c
             LEFT JOIN accounts a ON a.id = c.account_id
-            WHERE
-                c.firstname LIKE ?
-                OR c.lastname LIKE ?
-                OR CONCAT(c.firstname, ' ', c.lastname) LIKE ?
-                OR a.name LIKE ?
-                OR a.license LIKE ?
-                OR a.discord LIKE ?
-                OR a.steam LIKE ?
+            WHERE c.firstname LIKE ?
+               OR c.lastname LIKE ?
+               OR CONCAT(c.firstname, ' ', c.lastname) LIKE ?
+               OR a.name LIKE ?
+               OR a.license LIKE ?
+               OR a.discord LIKE ?
+               OR a.steam LIKE ?
             ORDER BY c.created_at DESC
             LIMIT %s
-        ]]):format(limit), {
-            like,
-            like,
-            like,
-            like,
-            like,
-            like,
-            like
-        })
+        ]]):format(limit), { like, like, like, like, like, like, like })
     end
 
     return DecorateCharacters(characters or {})
@@ -178,14 +178,12 @@ RegisterNetEvent('cw-admin:server:characters:delete', function(characterId)
     end
 
     characterId = tonumber(characterId)
-
     if not characterId then
         CWAdmin.SendError(src, 'Некорректный ID персонажа.')
         return
     end
 
     local activeCharacters = CWAdmin.GetActiveCharacters()
-
     if activeCharacters[characterId] then
         CWAdmin.SendError(src, 'Нельзя удалить персонажа, который сейчас активен в игре.')
         return
@@ -196,21 +194,14 @@ RegisterNetEvent('cw-admin:server:characters:delete', function(characterId)
         FROM characters
         WHERE id = ?
         LIMIT 1
-    ]], {
-        characterId
-    })
+    ]], { characterId })
 
     if not character then
         CWAdmin.SendError(src, 'Персонаж не найден.')
         return
     end
 
-    MySQL.update.await([[
-        DELETE FROM characters
-        WHERE id = ?
-    ]], {
-        characterId
-    })
+    MySQL.update.await('DELETE FROM characters WHERE id = ?', { characterId })
 
     CWAdmin.AdminLog(src, 'character_delete', {
         character_id = character.id,
