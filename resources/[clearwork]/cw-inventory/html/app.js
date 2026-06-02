@@ -9,7 +9,7 @@
     var containersEl = document.getElementById('containers');
     var selectionInfo = document.getElementById('selectionInfo');
 
-    var APP_VERSION = 'v21-rotate-visual-sync';
+    var APP_VERSION = 'v22-stacks-drag-only';
     var CELL = 48;
     var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {} };
     var selected = null;
@@ -20,6 +20,8 @@
     var dragPreviewElements = [];
     var dragPreviewKey = '';
     var suppressItemClick = false;
+    var pendingMoveAmounts = {};
+    var quantityDialog = null;
 
     function post(name, data) {
         return fetch('https://' + GetParentResourceName() + '/' + name, {
@@ -44,6 +46,61 @@
         if (message) {
             setTimeout(function () { if (notice.textContent === message) setNotice(''); }, 3500);
         }
+    }
+
+    function clampAmount(raw, max) {
+        var value = Math.floor(Number(raw) || 1);
+        max = Math.floor(Number(max) || 1);
+        if (value < 1) value = 1;
+        if (value > max) value = max;
+        return value;
+    }
+
+    function closeQuantityDialog() {
+        if (quantityDialog && quantityDialog.parentNode) quantityDialog.parentNode.removeChild(quantityDialog);
+        quantityDialog = null;
+    }
+
+    function openQuantityDialog(title, max, current, onOk) {
+        closeQuantityDialog();
+        max = Math.max(1, Math.floor(Number(max) || 1));
+        current = clampAmount(current || max, max);
+
+        quantityDialog = document.createElement('div');
+        quantityDialog.className = 'quantity-dialog-backdrop';
+        quantityDialog.innerHTML = '' +
+            '<div class="quantity-dialog">' +
+                '<div class="quantity-title">' + escapeHtml(title || 'Количество') + '</div>' +
+                '<div class="quantity-help">Максимум: ' + escapeHtml(max) + '</div>' +
+                '<input class="quantity-input" type="number" min="1" max="' + escapeHtml(max) + '" value="' + escapeHtml(current) + '">' +
+                '<div class="quantity-actions">' +
+                    '<button type="button" data-action="ok">ОК</button>' +
+                    '<button type="button" data-action="cancel">Отмена</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(quantityDialog);
+
+        var input = quantityDialog.querySelector('.quantity-input');
+        setTimeout(function () { if (input) { input.focus(); input.select(); } }, 0);
+
+        quantityDialog.addEventListener('click', function (event) {
+            var action = event.target && event.target.dataset ? event.target.dataset.action : '';
+            if (!action) return;
+            event.preventDefault();
+            if (action === 'cancel') { closeQuantityDialog(); return; }
+            var amount = clampAmount(input && input.value, max);
+            closeQuantityDialog();
+            if (typeof onOk === 'function') onOk(amount);
+        });
+
+        quantityDialog.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') { closeQuantityDialog(); return; }
+            if (event.key === 'Enter') {
+                var amount = clampAmount(input && input.value, max);
+                closeQuantityDialog();
+                if (typeof onOk === 'function') onOk(amount);
+            }
+        });
     }
 
     function closestElement(element, selector) {
@@ -110,7 +167,8 @@
 
     function fillItemDragGhost(el, item) {
         var size = visualSizeForItem(item, !!selectedRotated);
-        var label = itemLabel(item) + (Number(item.amount || 1) > 1 ? ' x' + item.amount : '');
+        var dragAmount = customDrag && customDrag.amount ? Number(customDrag.amount) : Number(item.amount || 1);
+        var label = itemLabel(item) + (dragAmount > 1 ? ' x' + dragAmount : '');
         el.style.width = (size.w * CELL) + 'px';
         el.style.height = (size.h * CELL) + 'px';
         el.innerHTML = '' +
@@ -127,7 +185,7 @@
             return;
         }
         var size = selectedSize(item);
-        selectionInfo.textContent = itemLabel(item) + ' • ' + size.w + 'x' + size.h + (selectedRotated ? ' • повернут' : '');
+        selectionInfo.textContent = itemLabel(item) + (Number(item.amount || 1) > 1 ? ' x' + item.amount : '') + ' • ' + size.w + 'x' + size.h + (selectedRotated ? ' • повернут' : '');
     }
 
     function clearDragOverElement() {
@@ -218,8 +276,32 @@
         if (!event || event.button !== 0) return;
         if (closestElement(event.target, 'input, textarea, select, button')) return;
 
+        var itemAmount = Math.max(1, Math.floor(Number(item.amount || 1)));
+        var moveAmount = itemAmount;
+        var splitMode = false;
+
+        if (event.ctrlKey && itemAmount > 1) {
+            event.preventDefault();
+            event.stopPropagation();
+            openQuantityDialog('Количество для ' + itemLabel(item), itemAmount, itemAmount, function (amount) {
+                pendingMoveAmounts[Number(item.id)] = amount;
+                setNotice('Выбрано ' + amount + '. Теперь перетащи этот стак.', 'success');
+            });
+            return;
+        }
+
+        if (event.altKey && itemAmount > 1) {
+            moveAmount = itemAmount - 1;
+            splitMode = true;
+        } else if (pendingMoveAmounts[Number(item.id)]) {
+            moveAmount = clampAmount(pendingMoveAmounts[Number(item.id)], itemAmount);
+            delete pendingMoveAmounts[Number(item.id)];
+        }
+
         customDrag = {
             itemId: Number(item.id),
+            amount: moveAmount,
+            split: splitMode,
             rotated: item.rotated === true || item.rotated === 1,
             sourceElement: closestElement(event.target, '.grid-item, .equip-item'),
             startX: event.clientX,
@@ -285,7 +367,9 @@
                 containerId: target.cell.dataset.container,
                 x: Number(target.cell.dataset.x),
                 y: Number(target.cell.dataset.y),
-                rotated: drag.rotated === true
+                rotated: drag.rotated === true,
+                amount: drag.amount || item.amount || 1,
+                split: drag.split === true
             };
             if (item.equip_slot) post('unequipItem', payload);
             else post('moveItem', payload);
@@ -319,7 +403,7 @@
                 var itemEl = document.createElement('div');
                 itemEl.className = 'equip-item ' + escapeHtml(item.type || '') + (selected === Number(item.id) ? ' selected' : '');
                 itemEl.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
-                    '<div class="item-meta">#' + escapeHtml(item.id) + '</div>';
+                    '<div class="item-meta"></div>';
                 itemEl.addEventListener('mousedown', function (e) { startItemMouseDrag(e, item); });
                 itemEl.addEventListener('click', function (e) {
                     e.stopPropagation();
@@ -330,12 +414,6 @@
             } else {
                 box.innerHTML += '<div class="empty-slot">пусто</div>';
             }
-
-            box.addEventListener('click', function () {
-                var item = selectedItem();
-                if (!item) return;
-                post('equipItem', { itemId: item.id, slot: slot.id });
-            });
 
             equipmentEl.appendChild(box);
         });
@@ -361,19 +439,6 @@
                 cell.dataset.container = container.id;
                 cell.dataset.x = xx;
                 cell.dataset.y = yy;
-                cell.addEventListener('click', function (e) {
-                    var item = selectedItem();
-                    if (!item) return;
-                    var payload = {
-                        itemId: item.id,
-                        containerId: e.currentTarget.dataset.container,
-                        x: Number(e.currentTarget.dataset.x),
-                        y: Number(e.currentTarget.dataset.y),
-                        rotated: selectedRotated
-                    };
-                    if (item.equip_slot) post('unequipItem', payload);
-                    else post('moveItem', payload);
-                });
                 grid.appendChild(cell);
             }
         }
@@ -388,7 +453,7 @@
             el.style.height = (Number(item.height || 1) * CELL) + 'px';
             el.title = itemLabel(item) + '\n' + (item.description || '');
             el.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
-                '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) + ' ' : '') + '#' + escapeHtml(item.id) + '</div>';
+                '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) : '') + '</div>';
             el.addEventListener('mousedown', function (e) { startItemMouseDrag(e, item); });
             el.addEventListener('click', function (e) {
                 e.stopPropagation();

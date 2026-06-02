@@ -1,5 +1,5 @@
 local InventoryClientDebug = true
-local InventoryClientVersion = 'v17-admin-move-delete'
+local InventoryClientVersion = 'v22-stack-amount-forward'
 local unpackArgs = table.unpack or unpack
 
 print(('[cw-admin:inventory:client] loaded %s'):format(InventoryClientVersion))

@@ -2,7 +2,7 @@
     'use strict';
 
     var DEBUG = true;
-    var INVENTORY_JS_VERSION = 'v21-rotate-visual-sync';
+    var INVENTORY_JS_VERSION = 'v22-stacks-quantity-ui';
     var CELL = 34;
 
     var lastCharacters = [];
@@ -25,6 +25,8 @@
     var inventoryDrag = null;
     var inventoryDragGhost = null;
     var suppressNextInventoryClick = false;
+    var pendingInventoryMoveAmounts = {};
+    var adminQuantityDialog = null;
 
     var categoryLabels = {
         all: 'Все',
@@ -183,12 +185,51 @@
         return value;
     }
 
-    function askAmount(item) {
-        var stack = Number(item && item.stack ? item.stack : 1) || 1;
-        var max = Math.max(1, Math.min(stack, 500));
-        var raw = window.prompt('Количество для ' + (item.label || item.name) + ' (1-' + max + '):', String(Math.min(selectedAmount || 1, max)));
-        if (raw === null) return null;
-        return clampAmount(raw, max);
+    function catalogDefaultAmount(item) {
+        return Math.max(1, Math.floor(Number(item && item.stack ? item.stack : 1) || 1));
+    }
+
+    function closeAdminQuantityDialog() {
+        if (adminQuantityDialog && adminQuantityDialog.parentNode) adminQuantityDialog.parentNode.removeChild(adminQuantityDialog);
+        adminQuantityDialog = null;
+    }
+
+    function openAdminQuantityDialog(title, max, current, onOk) {
+        closeAdminQuantityDialog();
+        max = Math.max(1, Math.floor(Number(max) || 1));
+        current = clampAmount(current || max, max);
+        adminQuantityDialog = document.createElement('div');
+        adminQuantityDialog.className = 'admin-quantity-backdrop';
+        adminQuantityDialog.innerHTML = '' +
+            '<div class="admin-quantity-dialog">' +
+                '<div class="admin-quantity-title">' + escapeHtml(title || 'Количество') + '</div>' +
+                '<div class="admin-quantity-help">Максимум: ' + escapeHtml(max) + '</div>' +
+                '<input class="admin-quantity-input" type="number" min="1" max="' + escapeHtml(max) + '" value="' + escapeHtml(current) + '">' +
+                '<div class="admin-quantity-actions">' +
+                    '<button type="button" data-action="ok">ОК</button>' +
+                    '<button type="button" data-action="cancel">Отмена</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(adminQuantityDialog);
+        var input = adminQuantityDialog.querySelector('.admin-quantity-input');
+        setTimeout(function () { if (input) { input.focus(); input.select(); } }, 0);
+        adminQuantityDialog.addEventListener('click', function (event) {
+            var action = event.target && event.target.dataset ? event.target.dataset.action : '';
+            if (!action) return;
+            event.preventDefault();
+            if (action === 'cancel') { closeAdminQuantityDialog(); return; }
+            var amount = clampAmount(input && input.value, max);
+            closeAdminQuantityDialog();
+            if (typeof onOk === 'function') onOk(amount);
+        });
+        adminQuantityDialog.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') { closeAdminQuantityDialog(); return; }
+            if (event.key === 'Enter') {
+                var amount = clampAmount(input && input.value, max);
+                closeAdminQuantityDialog();
+                if (typeof onOk === 'function') onOk(amount);
+            }
+        });
     }
 
     function effectiveSize(item) {
@@ -236,8 +277,9 @@
             '.admin-grid-item { position: absolute; box-sizing: border-box; border: 2px solid rgba(59,33,15,.8); background: rgba(59,33,15,.18); padding: 4px; overflow: hidden; pointer-events: auto; cursor: grab; user-select: none; }',
             '.admin-catalog-item.dragging-source, .admin-grid-item.dragging-source, .admin-equip-item.dragging-source { opacity: .32 !important; filter: grayscale(.25); }',
             '.admin-catalog-item.dragging-source *, .admin-grid-item.dragging-source *, .admin-equip-item.dragging-source * { opacity: .45 !important; }',
-            '.admin-grid-item .item-name { font-weight: 700; font-size: 12px; line-height: 1.1; }',
-            '.admin-grid-item .item-meta { font-size: 11px; opacity: .8; margin-top: 3px; }',
+            '.admin-grid-item .item-name { font-weight: 700; font-size: 12px; line-height: 1.05; overflow-wrap: anywhere; word-break: break-word; max-height: calc(100% - 14px); overflow: hidden; }',
+            '.admin-grid-item .item-meta { position: absolute; right: 4px; bottom: 2px; font-size: 11px; opacity: .9; background: rgba(241,223,170,.65); padding: 0 2px; }',
+            '.admin-equip-item { overflow-wrap: anywhere; word-break: break-word; }',
             '.admin-catalog-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }',
             '.admin-catalog-tabs button { padding: 7px 9px; font-size: 12px; }',
             '.admin-catalog-tabs button.active { background: #8b0000; }',
@@ -260,7 +302,13 @@
             '.inventory-log-table th { background: rgba(59,33,15,.12); position: sticky; top: 0; z-index: 1; }',
             '.inventory-log-time { width: 112px; white-space: nowrap; }',
             '.inventory-log-action { width: 108px; }',
-            '.inventory-log-amount { width: 48px; text-align: center; }'
+            '.inventory-log-amount { width: 48px; text-align: center; }',
+            '.admin-quantity-backdrop { position: fixed; inset: 0; z-index: 1000000; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.45); }',
+            '.admin-quantity-dialog { width: 360px; border: 2px solid #3b210f; background: #e4cb86; color: #2b180c; padding: 16px; box-shadow: 0 18px 55px rgba(0,0,0,.65); }',
+            '.admin-quantity-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }',
+            '.admin-quantity-help { font-size: 13px; margin-bottom: 10px; }',
+            '.admin-quantity-input { width: 100%; padding: 10px; border: 1px solid #3b210f; background: #f4e7b8; color: #2b180c; font-family: Georgia, serif; font-size: 16px; }',
+            '.admin-quantity-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }'
         ].join('\n');
 
         document.head.appendChild(style);
@@ -574,11 +622,17 @@
         if (!event || event.button !== 0) return;
         if (closestElement(event.target, 'input, textarea, select, button')) return;
 
-        var amount = 1;
+        var amount = catalogDefaultAmount(item);
         if (event.ctrlKey) {
-            var asked = askAmount(item);
-            if (asked === null) return;
-            amount = asked;
+            event.preventDefault();
+            event.stopPropagation();
+            openAdminQuantityDialog('Количество для ' + (item.label || item.name), catalogDefaultAmount(item), selectedAmount || catalogDefaultAmount(item), function (asked) {
+                selectedCatalog = item;
+                selectedAmount = asked;
+                selectedRotated = false;
+                renderModal(activePayload, true);
+            });
+            return;
         }
 
         var keepRotated = selectedCatalog && selectedCatalog.name === item.name && selectedRotated === true;
@@ -666,8 +720,33 @@
         if (!event || event.button !== 0) return;
         if (closestElement(event.target, 'input, textarea, select, button')) return;
 
+        var itemAmount = Math.max(1, Math.floor(Number(item.amount || 1)));
+        var moveAmount = itemAmount;
+        var splitMode = false;
+
+        if (event.ctrlKey && itemAmount > 1) {
+            event.preventDefault();
+            event.stopPropagation();
+            openAdminQuantityDialog('Количество для ' + itemLabel(item), itemAmount, itemAmount, function (amount) {
+                pendingInventoryMoveAmounts[Number(item.id)] = amount;
+                debug('pending inventory stack amount', item.id, amount);
+                renderModal(activePayload, true);
+            });
+            return;
+        }
+
+        if (event.altKey && itemAmount > 1) {
+            moveAmount = itemAmount - 1;
+            splitMode = true;
+        } else if (pendingInventoryMoveAmounts[Number(item.id)]) {
+            moveAmount = clampAmount(pendingInventoryMoveAmounts[Number(item.id)], itemAmount);
+            delete pendingInventoryMoveAmounts[Number(item.id)];
+        }
+
         inventoryDrag = {
             itemId: Number(item.id),
+            amount: moveAmount,
+            split: splitMode,
             rotated: item.rotated === true || item.rotated === 1,
             sourceElement: closestElement(event.target, '.admin-grid-item, .admin-equip-item'),
             startX: event.clientX,
@@ -693,7 +772,7 @@
 
         fillDragGhost(
             inventoryDragGhost,
-            itemLabel(item) + (Number(item.amount || 1) > 1 ? ' x' + item.amount : ''),
+            itemLabel(item) + (Number(inventoryDrag.amount || item.amount || 1) > 1 ? ' x' + (inventoryDrag.amount || item.amount) : ''),
             visualSizeFromStateItem(item, inventoryDrag.rotated === true),
             CELL
         );
@@ -741,7 +820,9 @@
                 container_id: target.cell.dataset.container,
                 x: Number(target.cell.dataset.x),
                 y: Number(target.cell.dataset.y),
-                rotated: drag.rotated === true
+                rotated: drag.rotated === true,
+                amount: drag.amount || 1,
+                split: drag.split === true
             });
             return true;
         }
@@ -1013,7 +1094,7 @@
             '<h3>Предметы</h3>' +
             '<div class="admin-catalog-controls">' +
                 '<input id="adminCatalogSearch" type="text" placeholder="Поиск предмета">' +
-                '<div class="admin-selected-line">' + escapeHtml(selectedText) + '<br>Перетащи предмет в слот. Ctrl при выборе — количество. R — повернуть.</div>' +
+                '<div class="admin-selected-line">' + escapeHtml(selectedText) + '<br>Перетащи предмет в слот. Ctrl при выборе — количество. Alt при переносе стака — оставить 1. R — повернуть.</div>' +
             '</div>' +
             '<div class="admin-catalog-tabs">' + cats.map(function (cat) {
                 return '<button type="button" class="catalog-tab' + (activeCategory === cat ? ' active' : '') + '" data-category="' + escapeHtml(cat) + '">' + escapeHtml(categoryLabels[cat] || cat) + '</button>';
@@ -1136,32 +1217,38 @@
                 }
 
                 if (event.ctrlKey) {
-                    var amount = askAmount(item);
-                    if (amount === null) return;
-                    selectedAmount = amount;
-                } else {
-                    selectedAmount = 1;
+                    openAdminQuantityDialog('Количество для ' + (item.label || item.name), catalogDefaultAmount(item), selectedAmount || catalogDefaultAmount(item), function (amount) {
+                        selectedCatalog = item;
+                        selectedAmount = amount;
+                        selectedRotated = false;
+                        debug('selected catalog item', item.name, 'amount', selectedAmount);
+                        renderModal(activePayload, true);
+                    });
+                    return;
                 }
 
                 selectedCatalog = item;
+                selectedAmount = catalogDefaultAmount(item);
                 selectedRotated = false;
                 debug('selected catalog item', item.name, 'amount', selectedAmount);
                 renderModal(activePayload, true);
             });
 
             row.addEventListener('dragstart', function (event) {
-                var amount = 1;
+                var amount = catalogDefaultAmount(item);
                 if (!selectedCatalog || selectedCatalog.name !== item.name) {
                     selectedRotated = false;
                 }
 
                 if (event.ctrlKey) {
-                    var asked = askAmount(item);
-                    if (asked === null) {
-                        event.preventDefault();
-                        return;
-                    }
-                    amount = asked;
+                    event.preventDefault();
+                    openAdminQuantityDialog('Количество для ' + (item.label || item.name), catalogDefaultAmount(item), selectedAmount || catalogDefaultAmount(item), function (asked) {
+                        selectedCatalog = item;
+                        selectedAmount = asked;
+                        selectedRotated = false;
+                        renderModal(activePayload, true);
+                    });
+                    return;
                 }
 
                 selectedCatalog = item;

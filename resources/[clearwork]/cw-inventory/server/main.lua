@@ -1,5 +1,5 @@
 local Config = CWInventoryConfig or {}
-local InventoryServerVersion = 'v20-self-container-guard'
+local InventoryServerVersion = 'v22-stacks-split-move'
 
 print(('[cw-inventory] loaded %s'):format(InventoryServerVersion))
 
@@ -465,6 +465,50 @@ local function metadataEquals(a, b)
     return enc(a or {}) == enc(b or {})
 end
 
+local function stackMaxForItemName(itemName)
+    local def = Items.Get(itemName) or {}
+    return math.max(1, tonumber(def.stack) or 1)
+end
+
+local function findStackAt(characterId, containerId, x, y, ignoreItemId, itemName, metadata)
+    containerId = tostring(containerId or '')
+    x = tonumber(x)
+    y = tonumber(y)
+    if containerId == '' or x == nil or y == nil then return nil end
+
+    local stackMax = stackMaxForItemName(itemName)
+    if stackMax <= 1 then return nil end
+
+    for _, other in ipairs(getItems(characterId)) do
+        if other.id ~= tonumber(ignoreItemId) and other.equip_slot == nil and other.container_id == containerId then
+            local ox = tonumber(other.x) or 0
+            local oy = tonumber(other.y) or 0
+            if x >= ox and x < ox + (tonumber(other.width) or 1) and y >= oy and y < oy + (tonumber(other.height) or 1) then
+                if other.item_name == itemName and metadataEquals(other.metadata, metadata) and (tonumber(other.amount) or 1) < stackMax then
+                    return other, stackMax
+                end
+                return nil, stackMax, 'Место занято.'
+            end
+        end
+    end
+
+    return nil, stackMax
+end
+
+local function updateSourceStackAfterTake(characterId, sourceItem, takeAmount)
+    takeAmount = math.floor(tonumber(takeAmount) or 0)
+    local current = tonumber(sourceItem and sourceItem.amount) or 0
+    if takeAmount <= 0 or current <= 0 then return false, 'Некорректное количество.' end
+
+    if takeAmount >= current then
+        MySQL.update.await('DELETE FROM cw_inventory_items WHERE id = ? AND character_id = ?', { sourceItem.id, characterId })
+        return true, 'deleted'
+    end
+
+    MySQL.update.await('UPDATE cw_inventory_items SET amount = amount - ? WHERE id = ? AND character_id = ?', { takeAmount, sourceItem.id, characterId })
+    return true, 'decremented'
+end
+
 local function getState(characterId)
     characterId = tonumber(characterId)
     ensureState(characterId)
@@ -526,10 +570,68 @@ local function moveItem(src, payload)
         local x = tonumber(payload.x)
         local y = tonumber(payload.y)
         local rotated = payload.rotated == true or payload.rotated == 1
+        local requestedAmount = tonumber(payload.amount)
+        local amountToMove = math.floor(requestedAmount or item.amount or 1)
+        if payload.split == true or payload.split == 1 then
+            amountToMove = math.max(1, (tonumber(item.amount) or 1) - 1)
+        end
+        if amountToMove < 1 then return false, 'Некорректное количество.' end
+        if amountToMove > (tonumber(item.amount) or 1) then return false, 'Нельзя перенести больше, чем есть в стаке.' end
+
         local before = copy(item)
 
-        local ok, msg = canPlace(characterId, item, toContainer, x, y, rotated, item.id)
+        local stackTarget, _, stackErr = findStackAt(characterId, toContainer, x, y, item.id, item.item_name, item.metadata)
+        if stackTarget then
+            local stackMax = stackMaxForItemName(item.item_name)
+            local free = stackMax - (tonumber(stackTarget.amount) or 1)
+            if amountToMove > free then
+                return false, ('В этом стаке свободно только %s.'):format(free)
+            end
+
+            local targetBefore = copy(stackTarget)
+            MySQL.update.await('UPDATE cw_inventory_items SET amount = amount + ? WHERE id = ? AND character_id = ?', { amountToMove, stackTarget.id, characterId })
+            updateSourceStackAfterTake(characterId, item, amountToMove)
+            bumpRevision(characterId)
+
+            logAction(characterId, player.account_id, 'stack_move', {
+                item_id = stackTarget.id,
+                item_name = item.item_name,
+                amount = amountToMove,
+                from_container = before.container_id,
+                to_container = toContainer,
+                from_slot = before.equip_slot,
+                before_json = { source = before, target = targetBefore },
+                after_json = { source = getItem(characterId, item.id), target = getItem(characterId, stackTarget.id) }
+            })
+            return true
+        elseif stackErr then
+            return false, stackErr
+        end
+
+        local ignoreForPlace = amountToMove >= (tonumber(item.amount) or 1) and item.id or -1
+        local ok, msg = canPlace(characterId, item, toContainer, x, y, rotated, ignoreForPlace)
         if not ok then return false, msg end
+
+        if amountToMove < (tonumber(item.amount) or 1) then
+            MySQL.update.await('UPDATE cw_inventory_items SET amount = amount - ? WHERE id = ? AND character_id = ?', { amountToMove, item.id, characterId })
+            local insertId = MySQL.insert.await([[INSERT INTO cw_inventory_items
+                (character_id, item_name, amount, metadata, container_id, x, y, rotated, equip_slot)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)]],
+                { characterId, item.item_name, amountToMove, enc(item.metadata), toContainer, math.floor(x), math.floor(y), rotated and 1 or 0 })
+
+            bumpRevision(characterId)
+            logAction(characterId, player.account_id, 'split_move', {
+                item_id = insertId,
+                item_name = item.item_name,
+                amount = amountToMove,
+                from_container = before.container_id,
+                to_container = toContainer,
+                from_slot = before.equip_slot,
+                before_json = before,
+                after_json = { source = getItem(characterId, item.id), created = getItem(characterId, insertId) }
+            })
+            return true
+        end
 
         MySQL.update.await([[UPDATE cw_inventory_items
             SET container_id = ?, x = ?, y = ?, rotated = ?, equip_slot = NULL
@@ -541,7 +643,7 @@ local function moveItem(src, payload)
         logAction(characterId, player.account_id, 'move', {
             item_id = item.id,
             item_name = item.item_name,
-            amount = item.amount,
+            amount = amountToMove,
             from_container = before.container_id,
             to_container = toContainer,
             from_slot = before.equip_slot,
@@ -780,6 +882,31 @@ local function addItemToCharacterAt(characterId, itemName, amount, metadata, tar
             return false, ('Максимум для одного слота: %s.'):format(stackMax)
         end
 
+        local stackTarget, _, stackErr = findStackAt(characterId, containerId, x, y, -1, itemName, metadata)
+        if stackTarget then
+            local free = stackMax - (tonumber(stackTarget.amount) or 1)
+            if amount > free then
+                return false, ('В этом стаке свободно только %s.'):format(free)
+            end
+
+            local before = copy(stackTarget)
+            MySQL.update.await('UPDATE cw_inventory_items SET amount = amount + ? WHERE id = ? AND character_id = ?', { amount, stackTarget.id, characterId })
+            bumpRevision(characterId)
+            logAction(characterId, actorAccountId, 'admin_add_stack', {
+                actor_source = actorSource,
+                item_id = stackTarget.id,
+                item_name = itemName,
+                amount = amount,
+                to_container = containerId,
+                before_json = before,
+                after_json = getItem(characterId, stackTarget.id)
+            })
+
+            return true
+        elseif stackErr then
+            return false, stackErr
+        end
+
         local tempItem = { item_name = itemName }
         dbg('AddItemToCharacterAt container target characterId=%s item=%s container=%s x=%s y=%s rotated=%s', tostring(characterId), tostring(itemName), tostring(containerId), tostring(x), tostring(y), tostring(rotated))
         local ok, msg = canPlace(characterId, tempItem, containerId, x, y, rotated, -1)
@@ -829,9 +956,16 @@ local function moveItemForCharacter(characterId, itemId, target, actorAccountId,
         local x = tonumber(target.x)
         local y = tonumber(target.y)
         local rotated = target.rotated == true or target.rotated == 1 or target.rotated == '1'
+        local amountToMove = math.floor(tonumber(target.amount) or tonumber(item.amount) or 1)
+        if target.split == true or target.split == 1 then
+            amountToMove = math.max(1, (tonumber(item.amount) or 1) - 1)
+        end
+        if amountToMove < 1 then return false, 'Некорректное количество.' end
+        if amountToMove > (tonumber(item.amount) or 1) then return false, 'Нельзя перенести больше, чем есть в стаке.' end
         local before = copy(item)
 
         if targetType == 'slot' or slot ~= '' then
+            if amountToMove ~= (tonumber(item.amount) or 1) then return false, 'Часть стака нельзя положить в слот экипировки.' end
             if slot == '' then return false, 'Некорректный слот экипировки.' end
             if not canEquipToSlot(item, slot) then return false, 'Этот предмет нельзя положить в этот слот.' end
 
@@ -864,8 +998,60 @@ local function moveItemForCharacter(characterId, itemId, target, actorAccountId,
             return false, 'Некорректная позиция.'
         end
 
-        local ok, msg = canPlace(characterId, item, containerId, x, y, rotated, item.id)
+        local stackTarget, _, stackErr = findStackAt(characterId, containerId, x, y, item.id, item.item_name, item.metadata)
+        if stackTarget then
+            local stackMax = stackMaxForItemName(item.item_name)
+            local free = stackMax - (tonumber(stackTarget.amount) or 1)
+            if amountToMove > free then
+                return false, ('В этом стаке свободно только %s.'):format(free)
+            end
+
+            local targetBefore = copy(stackTarget)
+            MySQL.update.await('UPDATE cw_inventory_items SET amount = amount + ? WHERE id = ? AND character_id = ?', { amountToMove, stackTarget.id, characterId })
+            updateSourceStackAfterTake(characterId, item, amountToMove)
+            bumpRevision(characterId)
+
+            logAction(characterId, actorAccountId, 'admin_stack_move', {
+                actor_source = actorSource,
+                item_id = stackTarget.id,
+                item_name = item.item_name,
+                amount = amountToMove,
+                from_container = before.container_id,
+                to_container = containerId,
+                from_slot = before.equip_slot,
+                before_json = { source = before, target = targetBefore },
+                after_json = { source = getItem(characterId, item.id), target = getItem(characterId, stackTarget.id) }
+            })
+            return true
+        elseif stackErr then
+            return false, stackErr
+        end
+
+        local ignoreForPlace = amountToMove >= (tonumber(item.amount) or 1) and item.id or -1
+        local ok, msg = canPlace(characterId, item, containerId, x, y, rotated, ignoreForPlace)
         if not ok then return false, msg end
+
+        if amountToMove < (tonumber(item.amount) or 1) then
+            MySQL.update.await('UPDATE cw_inventory_items SET amount = amount - ? WHERE id = ? AND character_id = ?', { amountToMove, item.id, characterId })
+            local insertId = MySQL.insert.await([[INSERT INTO cw_inventory_items
+                (character_id, item_name, amount, metadata, container_id, x, y, rotated, equip_slot)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)]],
+                { characterId, item.item_name, amountToMove, enc(item.metadata), containerId, math.floor(x), math.floor(y), rotated and 1 or 0 })
+
+            bumpRevision(characterId)
+            logAction(characterId, actorAccountId, 'admin_split_move', {
+                actor_source = actorSource,
+                item_id = insertId,
+                item_name = item.item_name,
+                amount = amountToMove,
+                from_container = before.container_id,
+                to_container = containerId,
+                from_slot = before.equip_slot,
+                before_json = before,
+                after_json = { source = getItem(characterId, item.id), created = getItem(characterId, insertId) }
+            })
+            return true
+        end
 
         MySQL.update.await([[UPDATE cw_inventory_items
             SET container_id = ?, x = ?, y = ?, rotated = ?, equip_slot = NULL
@@ -878,7 +1064,7 @@ local function moveItemForCharacter(characterId, itemId, target, actorAccountId,
             actor_source = actorSource,
             item_id = item.id,
             item_name = item.item_name,
-            amount = item.amount,
+            amount = amountToMove,
             from_container = before.container_id,
             to_container = containerId,
             from_slot = before.equip_slot,

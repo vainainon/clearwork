@@ -1,5 +1,5 @@
 local InventoryDebug = true
-local InventoryIntegrationVersion = 'v17-admin-move-delete'
+local InventoryIntegrationVersion = 'v22-stack-amount-forward'
 local OpenedCharacterInventories = {}
 local unpackArgs = table.unpack or unpack
 
@@ -278,6 +278,8 @@ local function normalizeTarget(target)
 
     if target.x ~= nil then result.x = tonumber(target.x) end
     if target.y ~= nil then result.y = tonumber(target.y) end
+    if target.amount ~= nil then result.amount = tonumber(target.amount) end
+    if target.split ~= nil then result.split = target.split == true or target.split == 1 or target.split == '1' end
 
     if result.type == '' and result.slot ~= '' then
         result.type = 'slot'
