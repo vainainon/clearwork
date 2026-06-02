@@ -1,44 +1,45 @@
-local SpawnCities = {
-    saintdenis = {
-        label = 'Saint Denis',
-        x = 2632.52,
-        y = -1312.31,
-        z = 51.42,
-        heading = 270.0
-    },
+local DEFAULT_CHANCE = 15
+local ROULETTE_COUNTDOWN_SECONDS = 5
+local DOWNED_SECONDS = 300
 
-    rhodes = {
-        label = 'Rhodes',
-        x = 1230.92,
-        y = -1298.34,
-        z = 76.90,
-        heading = 140.0
-    },
+local activeKnockdowns = {}
 
-    vanhorn = {
-        label = 'Van Horn',
-        x = 2981.54,
-        y = 570.16,
-        z = 44.63,
-        heading = 80.0
-    },
+local function ClampChance(value)
+    value = tonumber(value) or DEFAULT_CHANCE
+    value = math.floor(value)
 
-    annesburg = {
-        label = 'Annesburg',
-        x = 2932.58,
-        y = 1350.25,
-        z = 44.64,
-        heading = 250.0
+    if value < 0 then value = 0 end
+    if value > 100 then value = 100 end
+
+    return value
+end
+
+local function NormalizeCoords(coords)
+    coords = coords or {}
+
+    return {
+        x = tonumber(coords.x) or 0.0,
+        y = tonumber(coords.y) or 0.0,
+        z = tonumber(coords.z) or 0.0,
+        heading = tonumber(coords.heading) or 0.0
     }
-}
-
-local MAX_CHARACTERS = 3
-
-local function GetCWPlayer(src)
-    return exports['cw-core']:GetPlayer(src)
 end
 
 local function EnsureSchema()
+    MySQL.query.await([[
+        CREATE TABLE IF NOT EXISTS cw_settings (
+            `key` VARCHAR(64) NOT NULL,
+            `value` LONGTEXT NULL,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`key`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]])
+
+    MySQL.query.await([[
+        INSERT IGNORE INTO cw_settings (`key`, `value`)
+        VALUES ('permadeath_chance', '15');
+    ]])
+
     MySQL.query.await([[
         ALTER TABLE characters
         ADD COLUMN IF NOT EXISTS is_dead TINYINT(1) NOT NULL DEFAULT 0;
@@ -50,430 +51,191 @@ local function EnsureSchema()
     ]])
 end
 
-local function CleanupDeletedCharacters(accountId)
+local function GetPermadeathChance()
+    local value = MySQL.scalar.await(
+        'SELECT `value` FROM cw_settings WHERE `key` = ? LIMIT 1',
+        { 'permadeath_chance' }
+    )
+
+    return ClampChance(value)
+end
+
+local function SetPermadeathChance(value)
+    local chance = ClampChance(value)
+
     MySQL.update.await([[
-        DELETE FROM characters
-        WHERE account_id = ?
-          AND delete_requested_at IS NOT NULL
-          AND delete_requested_at <= DATE_SUB(NOW(), INTERVAL 12 HOUR)
-    ]], { accountId })
+        INSERT INTO cw_settings (`key`, `value`)
+        VALUES ('permadeath_chance', ?)
+        ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)
+    ]], { tostring(chance) })
+
+    return chance
 end
 
-local function GetCharacters(accountId)
-    CleanupDeletedCharacters(accountId)
+local function GetCWPlayer(src)
+    local ok, player = pcall(function()
+        return exports['cw-core']:GetPlayer(src)
+    end)
 
-    return MySQL.query.await([[
-        SELECT
-            id,
-            slot,
-            firstname,
-            lastname,
-            gender,
-            age,
-            cash,
-            bank,
-            skin,
-            is_dead,
-            revived_at,
-            created_at,
-            delete_requested_at,
-            TIMESTAMPDIFF(DAY, created_at, NOW()) AS age_days,
-            TIMESTAMPDIFF(MINUTE, delete_requested_at, NOW()) AS delete_minutes_passed
-        FROM characters
-        WHERE account_id = ?
-        ORDER BY slot ASC
-    ]], { accountId }) or {}
-end
-
-local function GetCurrentCharacterId(player)
-    if type(player) ~= 'table' or type(player.character) ~= 'table' then
-        return nil
-    end
-
-    return tonumber(player.character.id)
-end
-
-local function SendCharacters(src, playerOrAccountId)
-    local accountId = playerOrAccountId
-    local currentCharacterId = nil
-
-    if type(playerOrAccountId) == 'table' then
-        accountId = playerOrAccountId.account_id
-        currentCharacterId = GetCurrentCharacterId(playerOrAccountId)
-    end
-
-    if not accountId then
-        TriggerClientEvent('cw-characters:client:receiveCharacters', src, {}, nil)
-        return
-    end
-
-    local characters = GetCharacters(accountId)
-
-    for _, character in ipairs(characters) do
-        character.is_current = currentCharacterId ~= nil and tonumber(character.id) == currentCharacterId
-        character.is_dead = tonumber(character.is_dead) or 0
-        character.was_revived = character.revived_at ~= nil
-    end
-
-    TriggerClientEvent('cw-characters:client:receiveCharacters', src, characters, currentCharacterId)
-end
-
-local function GetFreeSlot(characters)
-    local usedSlots = {}
-
-    for _, character in ipairs(characters or {}) do
-        local slot = tonumber(character.slot)
-
-        if slot then
-            usedSlots[slot] = true
-        end
-    end
-
-    for slot = 1, MAX_CHARACTERS do
-        if not usedSlots[slot] then
-            return slot
-        end
+    if ok then
+        return player
     end
 
     return nil
 end
 
+local function SaveCharacterPosition(src, coords)
+    coords = NormalizeCoords(coords)
+
+    pcall(function()
+        exports['cw-core']:SaveCharacterPosition(src, coords)
+    end)
+end
+
+local function SetCharacterPermadead(src, characterId, coords)
+    coords = NormalizeCoords(coords)
+
+    MySQL.update.await([[
+        UPDATE characters
+        SET is_dead = 1,
+            revived_at = NULL,
+            pos_x = ?,
+            pos_y = ?,
+            pos_z = ?,
+            heading = ?
+        WHERE id = ?
+    ]], {
+        coords.x,
+        coords.y,
+        coords.z,
+        coords.heading,
+        tonumber(characterId)
+    })
+
+    local player = GetCWPlayer(src)
+
+    if player and player.character then
+        player.character.is_dead = 1
+        player.character.revived_at = nil
+        player.character.pos_x = coords.x
+        player.character.pos_y = coords.y
+        player.character.pos_z = coords.z
+        player.character.heading = coords.heading
+    end
+end
+
 CreateThread(function()
     Wait(500)
     EnsureSchema()
+    math.randomseed(os.time())
 end)
 
-RegisterNetEvent('cw-characters:server:getCharacters', function()
+RegisterNetEvent('cw-death:server:knockdown', function(coords)
     local src = source
     local player = GetCWPlayer(src)
 
-    if not player then
-        TriggerClientEvent('cw-characters:client:receiveCharacters', src, {}, nil)
+    if not player or not player.character then
+        activeKnockdowns[src] = nil
+        TriggerClientEvent('cw-death:client:cancelKnockdown', src)
         return
     end
 
-    SendCharacters(src, player)
+    coords = NormalizeCoords(coords)
+    SaveCharacterPosition(src, coords)
+
+    local characterId = tonumber(player.character.id)
+
+    if not characterId then
+        activeKnockdowns[src] = nil
+        TriggerClientEvent('cw-death:client:cancelKnockdown', src)
+        return
+    end
+
+    local alreadyDead = tonumber(player.character.is_dead) == 1
+    local chance = alreadyDead and 100 or GetPermadeathChance()
+
+    activeKnockdowns[src] = {
+        characterId = characterId,
+        coords = coords,
+        chance = chance,
+        alreadyDead = alreadyDead,
+        rolled = false
+    }
+
+    TriggerClientEvent('cw-death:client:roulettePrepared', src, {
+        chance = chance,
+        countdown = ROULETTE_COUNTDOWN_SECONDS,
+        seconds = DOWNED_SECONDS,
+        alreadyDead = alreadyDead
+    })
 end)
 
-RegisterNetEvent('cw-characters:server:createCharacter', function(data)
+RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
     local src = source
+    local state = activeKnockdowns[src]
+
+    if not state or state.rolled then
+        return
+    end
+
     local player = GetCWPlayer(src)
 
-    if not player or type(data) ~= 'table' then
+    if not player or not player.character then
+        activeKnockdowns[src] = nil
+        TriggerClientEvent('cw-death:client:cancelKnockdown', src)
         return
     end
 
-    local characters = GetCharacters(player.account_id)
+    state.rolled = true
 
-    if #characters >= MAX_CHARACTERS then
-        TriggerClientEvent('cw-characters:client:createFailed', src, 'Максимум 3 персонажа.')
-        return
+    if coords then
+        state.coords = NormalizeCoords(coords)
+        SaveCharacterPosition(src, state.coords)
     end
 
-    local slot = GetFreeSlot(characters)
+    local chance = ClampChance(state.chance)
+    local roll = math.random(1, 100)
+    local permadeath = roll <= chance
 
-    if not slot then
-        TriggerClientEvent('cw-characters:client:createFailed', src, 'Нет свободного слота персонажа.')
-        return
+    if state.alreadyDead then
+        chance = 100
+        roll = 1
+        permadeath = true
     end
 
-    local firstname = tostring(data.firstname or '')
-    local lastname = tostring(data.lastname or '')
-    local gender = tostring(data.gender or 'male')
-    local age = tonumber(data.age) or 18
-    local skin = json.encode(data.skin or {})
-    local cityKey = tostring(data.startCity or 'saintdenis')
-    local city = SpawnCities[cityKey] or SpawnCities.saintdenis
-
-    firstname = firstname:gsub('^%s+', ''):gsub('%s+$', '')
-    lastname = lastname:gsub('^%s+', ''):gsub('%s+$', '')
-
-    if firstname == '' or lastname == '' then
-        TriggerClientEvent('cw-characters:client:createFailed', src, 'Имя и фамилия обязательны.')
-        return
-    end
-
-    if age < 16 or age > 90 then
-        TriggerClientEvent('cw-characters:client:createFailed', src, 'Возраст должен быть от 16 до 90.')
-        return
-    end
-
-    local ok, characterId = pcall(function()
-        return MySQL.insert.await([[
-            INSERT INTO characters
-                (account_id, slot, firstname, lastname, gender, age, cash, bank, pos_x, pos_y, pos_z, heading, skin, is_dead, revived_at)
-            VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)
-        ]], {
-            player.account_id,
-            slot,
-            firstname,
-            lastname,
-            gender,
-            age,
-            15.00,
-            0.00,
-            city.x,
-            city.y,
-            city.z,
-            city.heading,
-            skin
-        })
+    local ok, err = pcall(function()
+        if permadeath then
+            SetCharacterPermadead(src, state.characterId, state.coords)
+        end
     end)
 
     if not ok then
-        print(('[cw-characters] Create character failed for account %s: %s'):format(
-            tostring(player.account_id),
-            tostring(characterId)
+        print(('[cw-death] Failed to set permadeath for character %s: %s'):format(
+            tostring(state.characterId),
+            tostring(err)
         ))
 
-        TriggerClientEvent('cw-characters:client:createFailed', src, 'Не удалось создать персонажа. Попробуй ещё раз.')
-        SendCharacters(src, player)
-        return
+        permadeath = false
     end
 
-    print(('[cw-characters] Created character %s for account %s in slot %s'):format(
-        characterId,
-        player.account_id,
-        slot
-    ))
+    TriggerClientEvent('cw-death:client:rollResult', src, {
+        chance = chance,
+        roll = roll,
+        permadeath = permadeath,
+        seconds = DOWNED_SECONDS,
+        alreadyDead = state.alreadyDead == true
+    })
 
-    TriggerClientEvent('cw-characters:client:createSuccess', src)
-    SendCharacters(src, player)
+    activeKnockdowns[src] = nil
 end)
 
-RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(characterId)
-    local src = source
-    local player = GetCWPlayer(src)
-
-    if not player then
-        return
-    end
-
-    characterId = tonumber(characterId)
-
-    if not characterId then
-        return
-    end
-
-    local character = MySQL.single.await([[
-        SELECT
-            id,
-            firstname,
-            lastname,
-            created_at,
-            delete_requested_at,
-            is_dead,
-            TIMESTAMPDIFF(DAY, created_at, NOW()) AS age_days
-        FROM characters
-        WHERE id = ?
-          AND account_id = ?
-        LIMIT 1
-    ]], { characterId, player.account_id })
-
-    if not character then
-        TriggerClientEvent('cw-characters:client:deleteFailed', src, 'Персонаж не найден.')
-        return
-    end
-
-    local isDead = tonumber(character.is_dead) == 1
-    local isCurrent = player.character and tonumber(player.character.id) == characterId
-
-    if isCurrent and not isDead then
-        TriggerClientEvent('cw-characters:client:deleteFailed', src, 'Нельзя поставить на удаление персонажа, за которого ты сейчас играешь.')
-        SendCharacters(src, player)
-        return
-    end
-
-    if character.delete_requested_at then
-        TriggerClientEvent('cw-characters:client:deleteFailed', src, 'Персонаж уже поставлен на удаление.')
-        SendCharacters(src, player)
-        return
-    end
-
-    if not isDead and tonumber(character.age_days) < 7 then
-        TriggerClientEvent('cw-characters:client:deleteFailed', src, 'Персонажа можно удалить только через 7 дней после создания.')
-        SendCharacters(src, player)
-        return
-    end
-
-    MySQL.update.await([[
-        UPDATE characters
-        SET delete_requested_at = NOW()
-        WHERE id = ?
-          AND account_id = ?
-    ]], { characterId, player.account_id })
-
-    if isCurrent and isDead then
-        exports['cw-core']:ClearCharacter(src)
-        player.character = nil
-    end
-
-    print(('[cw-characters] Delete requested for character %s by account %s'):format(
-        characterId,
-        player.account_id
-    ))
-
-    SendCharacters(src, player)
+RegisterNetEvent('cw-death:server:saveDownedPosition', function(coords)
+    SaveCharacterPosition(source, coords)
 end)
 
-RegisterNetEvent('cw-characters:server:cancelDeleteCharacter', function(characterId)
-    local src = source
-    local player = GetCWPlayer(src)
-
-    if not player then
-        return
-    end
-
-    characterId = tonumber(characterId)
-
-    if not characterId then
-        return
-    end
-
-    local character = MySQL.single.await([[
-        SELECT
-            id,
-            delete_requested_at,
-            TIMESTAMPDIFF(MINUTE, delete_requested_at, NOW()) AS delete_minutes_passed
-        FROM characters
-        WHERE id = ?
-          AND account_id = ?
-        LIMIT 1
-    ]], { characterId, player.account_id })
-
-    if not character or not character.delete_requested_at then
-        TriggerClientEvent('cw-characters:client:deleteFailed', src, 'Удаление не запрошено.')
-        return
-    end
-
-    if tonumber(character.delete_minutes_passed) > 60 then
-        TriggerClientEvent('cw-characters:client:deleteFailed', src, 'Отменить удаление можно только в первый час.')
-        return
-    end
-
-    MySQL.update.await([[
-        UPDATE characters
-        SET delete_requested_at = NULL
-        WHERE id = ?
-          AND account_id = ?
-    ]], { characterId, player.account_id })
-
-    print(('[cw-characters] Delete cancelled for character %s by account %s'):format(
-        characterId,
-        player.account_id
-    ))
-
-    SendCharacters(src, player)
+AddEventHandler('playerDropped', function()
+    activeKnockdowns[source] = nil
 end)
 
-RegisterNetEvent('cw-characters:server:selectCharacter', function(characterId)
-    local src = source
-    local player = GetCWPlayer(src)
-
-    if not player then
-        return
-    end
-
-    characterId = tonumber(characterId)
-
-    if not characterId then
-        return
-    end
-
-    if player.character and tonumber(player.character.id) == characterId then
-        SendCharacters(src, player)
-        return
-    end
-
-    if player.character then
-        TriggerClientEvent('cw-core:client:requestCurrentPositionSave', src)
-    end
-
-    local character = MySQL.single.await([[
-        SELECT *
-        FROM characters
-        WHERE id = ?
-          AND account_id = ?
-        LIMIT 1
-    ]], { characterId, player.account_id })
-
-    if not character then
-        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Персонаж не найден.')
-        return
-    end
-
-    if character.delete_requested_at then
-        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Персонаж ожидает удаления.')
-        SendCharacters(src, player)
-        return
-    end
-
-    if tonumber(character.is_dead) == 1 then
-        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Персонаж убит. Его нельзя выбрать, пока администрация не снимет пермакилл.')
-        SendCharacters(src, player)
-        return
-    end
-
-    local wasRevived = character.revived_at ~= nil
-
-    if wasRevived then
-        MySQL.update.await([[
-            UPDATE characters
-            SET revived_at = NULL
-            WHERE id = ?
-              AND account_id = ?
-        ]], { characterId, player.account_id })
-
-        character.revived_at = nil
-        character.was_revived = false
-    end
-
-    exports['cw-core']:SetCharacter(src, character)
-
-    print(('[cw-characters] Selected character %s %s for %s at %.2f %.2f %.2f'):format(
-        character.firstname,
-        character.lastname,
-        player.name,
-        tonumber(character.pos_x) or 0.0,
-        tonumber(character.pos_y) or 0.0,
-        tonumber(character.pos_z) or 0.0
-    ))
-
-    TriggerClientEvent('cw-characters:client:characterSelected', src, character)
-end)
-
-RegisterNetEvent('cw-characters:server:clearSelectedCharacter', function()
-    local src = source
-    local player = GetCWPlayer(src)
-
-    if not player then
-        return
-    end
-
-    exports['cw-core']:ClearCharacter(src)
-
-    print(('[cw-characters] Cleared selected character for %s'):format(player.name))
-end)
-
-RegisterNetEvent('cw-characters:server:openCharacterMenu', function(coords)
-    local src = source
-    local player = GetCWPlayer(src)
-
-    if not player then
-        return
-    end
-
-    if player.character and type(coords) == 'table' then
-        exports['cw-core']:SaveCharacterPosition(src, coords)
-
-        print(('[cw-characters] Saved position before opening character menu: %s %.2f %.2f %.2f'):format(
-            player.character.id,
-            tonumber(coords.x) or 0.0,
-            tonumber(coords.y) or 0.0,
-            tonumber(coords.z) or 0.0
-        ))
-    end
-
-    SendCharacters(src, player)
-end)
+exports('GetPermadeathChance', GetPermadeathChance)
+exports('SetPermadeathChance', SetPermadeathChance)

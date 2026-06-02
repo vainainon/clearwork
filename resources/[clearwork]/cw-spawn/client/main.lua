@@ -1,8 +1,8 @@
 local defaultSpawn = {
-    x = 1230.92,
-    y = -1298.15,
-    z = 76.9,
-    heading = 180.0
+    x = 2632.52,
+    y = -1312.31,
+    z = 51.42,
+    heading = 270.0
 }
 
 local function DisableSpawnManagerAutoSpawn()
@@ -18,7 +18,7 @@ local function GetSpawnCoords(character)
         x = tonumber(character and character.pos_x) or defaultSpawn.x,
         y = tonumber(character and character.pos_y) or defaultSpawn.y,
         z = tonumber(character and character.pos_z) or defaultSpawn.z,
-        heading = tonumber(character and character.pos_heading) or defaultSpawn.heading
+        heading = tonumber(character and character.heading) or defaultSpawn.heading
     }
 end
 

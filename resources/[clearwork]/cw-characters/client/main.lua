@@ -2,6 +2,16 @@ local characters = {}
 local uiOpen = false
 local characterSelected = false
 local currentCharacterId = nil
+local firstOpenDone = false
+local accountRetryCount = 0
+
+local function DisableSpawnManagerAutoSpawn()
+    if GetResourceState('spawnmanager') == 'started' then
+        pcall(function()
+            exports.spawnmanager:setAutoSpawn(false)
+        end)
+    end
+end
 
 local function Notify(message)
     TriggerEvent('chat:addMessage', {
@@ -29,66 +39,159 @@ local function SetPedHiddenInCharacterMenu(state)
     end
 end
 
+local function GetCurrentCoords()
+    local ped = PlayerPedId()
+    local coords = GetEntityCoords(ped)
+
+    return {
+        x = coords.x,
+        y = coords.y,
+        z = coords.z,
+        heading = GetEntityHeading(ped)
+    }
+end
+
 local function ApplyBasicAppearance(character)
     if not character then return end
 
-    local ped = PlayerPedId()
+    local skin = nil
 
-    if character.scale then
-        local scale = tonumber(character.scale)
-        if scale then
-            SetPedScale(ped, scale)
+    if character.skin then
+        local ok, decoded = pcall(json.decode, character.skin)
+
+        if ok and type(decoded) == 'table' then
+            skin = decoded
         end
+    end
+
+    local ped = PlayerPedId()
+    local scale = nil
+
+    if skin and skin.scale then
+        scale = tonumber(skin.scale)
+    elseif character.scale then
+        scale = tonumber(character.scale)
+    end
+
+    if scale and SetPedScale then
+        SetPedScale(ped, scale)
     end
 end
 
-local function SetCharacterUI(state)
-    uiOpen = state
-    SetNuiFocus(state, state)
+local function OpenUI()
+    uiOpen = true
 
-    if state then
-        SetPedHiddenInCharacterMenu(true)
-    else
-        SetPedHiddenInCharacterMenu(false)
-    end
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
+    SetPedHiddenInCharacterMenu(true)
 
     SendNUIMessage({
-        action = 'setVisible',
-        visible = state
+        action = 'open',
+        characters = characters,
+        currentCharacterId = currentCharacterId,
+        hasSelectedCharacter = characterSelected
     })
 end
 
+local function CloseUI()
+    uiOpen = false
+
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    SetPedHiddenInCharacterMenu(false)
+
+    SendNUIMessage({
+        action = 'close'
+    })
+end
+
+local function RequestCharacters(saveCurrentPosition)
+    if saveCurrentPosition then
+        TriggerServerEvent('cw-characters:server:openCharacterMenu', GetCurrentCoords())
+    else
+        TriggerServerEvent('cw-characters:server:getCharacters')
+    end
+end
+
 local function OpenCharacterMenu()
+    DisableSpawnManagerAutoSpawn()
+
     DoScreenFadeOut(200)
     Wait(250)
 
     SetPedHiddenInCharacterMenu(true)
 
-    TriggerServerEvent('cw-characters:server:getCharacters')
+    RequestCharacters(characterSelected)
 
     Wait(250)
     DoScreenFadeIn(400)
 end
 
-RegisterNetEvent('cw-characters:client:receiveCharacters', function(data)
+CreateThread(function()
+    DisableSpawnManagerAutoSpawn()
+
+    Wait(4500)
+
+    if not firstOpenDone then
+        firstOpenDone = true
+        OpenCharacterMenu()
+    end
+end)
+
+RegisterCommand('chars', function()
+    OpenCharacterMenu()
+end, false)
+
+RegisterCommand('char', function()
+    OpenCharacterMenu()
+end, false)
+
+RegisterCommand('changechar', function()
+    OpenCharacterMenu()
+end, false)
+
+RegisterNetEvent('cw-characters:client:accountNotReady', function()
+    accountRetryCount = accountRetryCount + 1
+
+    if accountRetryCount > 20 then
+        Notify('Аккаунт не загрузился. Перезайди на сервер.')
+        return
+    end
+
+    SetTimeout(1000, function()
+        RequestCharacters(false)
+    end)
+end)
+
+RegisterNetEvent('cw-characters:client:receiveCharacters', function(data, serverCurrentCharacterId)
+    accountRetryCount = 0
     characters = data or {}
 
-    SendNUIMessage({
-        action = 'setCharacters',
-        characters = characters,
-        currentCharacterId = currentCharacterId
-    })
+    currentCharacterId = serverCurrentCharacterId and tonumber(serverCurrentCharacterId) or nil
 
-    SetCharacterUI(true)
+    if not currentCharacterId then
+        for _, character in ipairs(characters) do
+            if character.is_current == true or character.is_current == 1 or character.is_current == '1' then
+                currentCharacterId = tonumber(character.id)
+                break
+            end
+        end
+    end
+
+    if currentCharacterId then
+        characterSelected = true
+    end
+
+    OpenUI()
 end)
 
 RegisterNetEvent('cw-characters:client:characterSelected', function(character)
     if not character then return end
 
     characterSelected = true
-    currentCharacterId = character.id
+    currentCharacterId = tonumber(character.id)
 
-    SetCharacterUI(false)
+    CloseUI()
     ApplyBasicAppearance(character)
 
     TriggerEvent('cw-spawn:client:spawnCharacter', character)
@@ -96,13 +199,23 @@ end)
 
 RegisterNetEvent('cw-characters:client:selectFailed', function(message)
     Notify(message or 'Нельзя выбрать этого персонажа.')
-
-    TriggerServerEvent('cw-characters:server:getCharacters')
+    RequestCharacters(false)
 end)
 
-RegisterCommand('chars', function()
-    OpenCharacterMenu()
-end, false)
+RegisterNetEvent('cw-characters:client:createFailed', function(message)
+    Notify(message or 'Не удалось создать персонажа.')
+    RequestCharacters(false)
+end)
+
+RegisterNetEvent('cw-characters:client:createSuccess', function()
+    Notify('Персонаж создан.')
+    RequestCharacters(false)
+end)
+
+RegisterNetEvent('cw-characters:client:deleteFailed', function(message)
+    Notify(message or 'Не удалось удалить персонажа.')
+    RequestCharacters(false)
+end)
 
 RegisterNUICallback('selectCharacter', function(data, cb)
     if data and data.id then
@@ -134,24 +247,28 @@ RegisterNUICallback('cancelDeleteCharacter', function(data, cb)
 end)
 
 RegisterNUICallback('closeMenu', function(_, cb)
-    if not characterSelected then
-        Notify('Сначала выбери или создай персонажа.')
-        cb({ ok = false })
+    if characterSelected then
+        CloseUI()
+        cb({ ok = true })
         return
     end
 
-    SetCharacterUI(false)
-    cb({ ok = true })
+    Notify('Сначала выбери или создай персонажа.')
+    cb({ ok = false })
 end)
 
-CreateThread(function()
-    Wait(2500)
-    OpenCharacterMenu()
+AddEventHandler('onClientResourceStart', function(resourceName)
+    if resourceName == GetCurrentResourceName() then
+        DisableSpawnManagerAutoSpawn()
+        SetNuiFocus(false, false)
+        SetNuiFocusKeepInput(false)
+    end
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
 
     SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
     SetPedHiddenInCharacterMenu(false)
 end)

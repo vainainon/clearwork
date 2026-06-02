@@ -62,11 +62,13 @@ local function CanManagePermadeath(src)
         return true
     end
 
-    local role = CWAdmin.GetAdminRole(src)
+    if CWAdmin.HasPermission(src, 'characters.revive') or CWAdmin.HasPermission(src, 'characters.permadeath') then
+        return true
+    end
 
-    return role == 'owner'
-        or role == 'general'
-        or role == 'admin'
+    local role = CWAdmin.GetAdminRole and CWAdmin.GetAdminRole(src) or nil
+
+    return role == 'owner' or role == 'general' or role == 'admin'
 end
 
 local function GetServerCoords(src)

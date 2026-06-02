@@ -1,6 +1,4 @@
-* {
-    box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 html,
 body {
@@ -14,9 +12,7 @@ body {
     color: #2b1608;
 }
 
-.hidden {
-    display: none !important;
-}
+.hidden { display: none !important; }
 
 #deathRoot {
     position: fixed;
@@ -36,9 +32,7 @@ body {
     padding: 26px;
     background: linear-gradient(180deg, rgba(227, 201, 143, 0.98), rgba(200, 169, 104, 0.98));
     border: 6px solid #3b210f;
-    box-shadow:
-        0 0 0 2px #8b5a24 inset,
-        0 0 60px rgba(0, 0, 0, 0.95);
+    box-shadow: 0 0 0 2px #8b5a24 inset, 0 0 60px rgba(0, 0, 0, 0.95);
 }
 
 .death-header {
@@ -111,12 +105,9 @@ body {
     height: 352px;
     border-radius: 50%;
     padding: 18px;
-    background:
-        radial-gradient(circle, #2b1608 0 52%, #8b5a24 53% 59%, #3b210f 60% 100%);
+    background: radial-gradient(circle, #2b1608 0 52%, #8b5a24 53% 59%, #3b210f 60% 100%);
     border: 8px solid #3b210f;
-    box-shadow:
-        0 0 0 4px #8b5a24,
-        0 20px 35px rgba(0, 0, 0, 0.55);
+    box-shadow: 0 0 0 4px #8b5a24, 0 20px 35px rgba(0, 0, 0, 0.55);
     transform: rotate(0deg);
     transition: transform 5.7s cubic-bezier(0.12, 0.72, 0.08, 1);
 }
@@ -178,29 +169,10 @@ body {
     font-size: 15px;
 }
 
-.label-top {
-    top: 18px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.label-right {
-    right: 18px;
-    top: 50%;
-    transform: translateY(-50%);
-}
-
-.label-bottom {
-    bottom: 18px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-
-.label-left {
-    left: 18px;
-    top: 50%;
-    transform: translateY(-50%);
-}
+.label-top { top: 18px; left: 50%; transform: translateX(-50%); }
+.label-right { right: 18px; top: 50%; transform: translateY(-50%); }
+.label-bottom { bottom: 18px; left: 50%; transform: translateX(-50%); }
+.label-left { left: 18px; top: 50%; transform: translateY(-50%); }
 
 .hub {
     position: absolute;
@@ -211,8 +183,7 @@ body {
     height: 132px;
     transform: translate(-50%, -50%);
     border-radius: 50%;
-    background:
-        radial-gradient(circle, #f1dfaa 0 50%, #c8a968 51% 100%);
+    background: radial-gradient(circle, #f1dfaa 0 50%, #c8a968 51% 100%);
     border: 5px solid #3b210f;
     display: flex;
     flex-direction: column;

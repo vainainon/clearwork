@@ -31,13 +31,19 @@ function post(name, data = {}) {
 
 function showView(name) {
     Object.keys(views).forEach((key) => {
-        views[key].classList.toggle('hidden', key !== name);
+        if (views[key]) {
+            views[key].classList.toggle('hidden', key !== name);
+        }
     });
 
-    errorBox.textContent = '';
+    if (errorBox) {
+        errorBox.textContent = '';
+    }
 }
 
 function openConfirm(text, onConfirm) {
+    if (!modal || !confirmText) return;
+
     confirmText.textContent = text;
     pendingConfirm = onConfirm;
     modal.classList.remove('hidden');
@@ -45,16 +51,19 @@ function openConfirm(text, onConfirm) {
 
 function closeConfirm() {
     pendingConfirm = null;
-    modal.classList.add('hidden');
+
+    if (modal) {
+        modal.classList.add('hidden');
+    }
 }
 
 function getAppearanceData() {
     return {
-        scale: Number(document.getElementById('scale').value),
-        skinTone: Number(document.getElementById('skinTone').value),
-        faceShape: Number(document.getElementById('faceShape').value),
-        hair: document.getElementById('hair').value,
-        beard: document.getElementById('beard').value
+        scale: Number(document.getElementById('scale')?.value || 1),
+        skinTone: Number(document.getElementById('skinTone')?.value || 0),
+        faceShape: Number(document.getElementById('faceShape')?.value || 0),
+        hair: document.getElementById('hair')?.value || 'short',
+        beard: document.getElementById('beard')?.value || 'none'
     };
 }
 
@@ -78,34 +87,73 @@ function isCurrentCharacter(character) {
     return currentCharacterId !== null && Number(character.id) === Number(currentCharacterId);
 }
 
+function isDeadCharacter(character) {
+    return Number(character.is_dead) === 1;
+}
+
+function isRevivedCharacter(character) {
+    return character.was_revived === true
+        || character.was_revived === 1
+        || character.was_revived === '1'
+        || Boolean(character.revived_at);
+}
+
 function renderCharacters() {
+    if (!characterList) return;
+
     characterList.innerHTML = '';
 
     if (!currentCharacters.length) {
         characterList.innerHTML = `
-            <div class="character-card">
+            <div class="info-card">
                 <h3>Персонажей нет</h3>
                 <p>Создай первого жителя Лемойна.</p>
             </div>
         `;
+
         return;
     }
 
     currentCharacters.forEach((character) => {
         const status = getDeleteStatus(character);
         const ageDays = Number(character.age_days || 0);
-        const canRequestDelete = ageDays >= 7 && !status;
+
         const isCurrent = isCurrentCharacter(character);
+        const isDead = isDeadCharacter(character);
+        const isRevived = isRevivedCharacter(character);
+
+        const canRequestDelete = isDead || ageDays >= 7;
 
         const card = document.createElement('div');
-        card.className = isCurrent ? 'character-card current-character' : 'character-card';
+        card.className = 'character-card';
+
+        if (isCurrent) {
+            card.classList.add('current-character');
+        }
+
+        if (isDead) {
+            card.classList.add('dead-character');
+        }
 
         let statusHtml = '';
 
-        if (isCurrent) {
+        if (isDead) {
+            statusHtml = `
+                <div class="delete-status dead-status">
+                    <strong>ПЕРМА-КИЛЛ</strong><br>
+                    Персонаж убит. Его нельзя выбрать, пока администрация не снимет пермакилл.
+                </div>
+            `;
+        } else if (isCurrent) {
             statusHtml = `
                 <div class="delete-status selected-status">
                     Сейчас ты играешь за этого персонажа.
+                </div>
+            `;
+        } else if (isRevived) {
+            statusHtml = `
+                <div class="delete-status revived-status">
+                    Пермакилл снят администрацией. Персонажа можно возродить.
                 </div>
             `;
         } else if (status) {
@@ -123,28 +171,54 @@ function renderCharacters() {
             `;
         }
 
+        let actionsHtml = '';
+
+        if (isDead) {
+            actionsHtml = `
+                <div class="card-actions single-action">
+                    <button class="delete-btn">Удалить</button>
+                </div>
+            `;
+        } else if (status) {
+            actionsHtml = `
+                <div class="card-actions single-action">
+                    <button class="cancel-delete-btn" ${status.cancelAvailable ? '' : 'disabled'}>Отменить удаление</button>
+                </div>
+            `;
+        } else if (isCurrent) {
+            actionsHtml = `
+                <div class="card-actions">
+                    <button class="select-btn selected-btn" disabled>Выбран</button>
+                    <button class="delete-btn" disabled>Удалить</button>
+                </div>
+            `;
+        } else {
+            const selectLabel = isRevived ? 'Возродиться' : 'Войти';
+
+            actionsHtml = `
+                <div class="card-actions">
+                    <button class="select-btn ${isRevived ? 'revive-select-btn' : ''}">${selectLabel}</button>
+                    <button class="delete-btn" ${canRequestDelete ? '' : 'disabled'}>Удалить</button>
+                </div>
+            `;
+        }
+
         card.innerHTML = `
             <h3>${character.firstname} ${character.lastname}</h3>
+
             <p>Возраст: ${character.age}</p>
             <p>Пол: ${character.gender}</p>
             <p>Наличные: $${character.cash}</p>
+
             ${statusHtml}
-            <div class="card-actions">
-                <button class="select-btn ${isCurrent ? 'selected-btn' : ''}" ${status || isCurrent ? 'disabled' : ''}>
-                    ${isCurrent ? 'Выбран' : 'Войти'}
-                </button>
-                ${status
-                ? `<button class="cancel-delete-btn" ${isCurrent ? 'disabled' : ''}>Отменить</button>`
-                : `<button class="delete-btn" ${!canRequestDelete || isCurrent ? 'disabled' : ''}>Удалить</button>`
-            }
-            </div>
+            ${actionsHtml}
         `;
 
         const selectBtn = card.querySelector('.select-btn');
 
         if (selectBtn) {
             selectBtn.addEventListener('click', () => {
-                if (isCurrent) {
+                if (isCurrent || isDead || status) {
                     return;
                 }
 
@@ -158,18 +232,23 @@ function renderCharacters() {
 
         if (deleteBtn) {
             deleteBtn.addEventListener('click', () => {
-                if (isCurrent) {
+                if (deleteBtn.disabled) {
                     return;
                 }
 
-                openConfirm(
-                    `Поставить персонажа ${character.firstname} ${character.lastname} на удаление? Окончательное удаление произойдёт через 12 часов. Отменить можно только в первый час.`,
-                    () => {
-                        post('requestDeleteCharacter', {
-                            id: character.id
-                        });
-                    }
-                );
+                if (isCurrent && !isDead) {
+                    return;
+                }
+
+                const deadText = isDead
+                    ? `Персонаж ${character.firstname} ${character.lastname} убит. Поставить его на удаление?`
+                    : `Поставить персонажа ${character.firstname} ${character.lastname} на удаление? Окончательное удаление произойдёт через 12 часов. Отменить можно только в первый час.`;
+
+                openConfirm(deadText, () => {
+                    post('requestDeleteCharacter', {
+                        id: character.id
+                    });
+                });
             });
         }
 
@@ -177,18 +256,15 @@ function renderCharacters() {
 
         if (cancelDeleteBtn) {
             cancelDeleteBtn.addEventListener('click', () => {
-                if (isCurrent) {
+                if (cancelDeleteBtn.disabled || isCurrent) {
                     return;
                 }
 
-                openConfirm(
-                    `Отменить удаление персонажа ${character.firstname} ${character.lastname}?`,
-                    () => {
-                        post('cancelDeleteCharacter', {
-                            id: character.id
-                        });
-                    }
-                );
+                openConfirm(`Отменить удаление персонажа ${character.firstname} ${character.lastname}?`, () => {
+                    post('cancelDeleteCharacter', {
+                        id: character.id
+                    });
+                });
             });
         }
 
@@ -196,20 +272,20 @@ function renderCharacters() {
     });
 }
 
-document.getElementById('showCharactersBtn').addEventListener('click', () => {
+document.getElementById('showCharactersBtn')?.addEventListener('click', () => {
     renderCharacters();
     showView('characters');
 });
 
-document.getElementById('showCreateBtn').addEventListener('click', () => {
+document.getElementById('showCreateBtn')?.addEventListener('click', () => {
     showView('create');
 });
 
-document.getElementById('showRulesBtn').addEventListener('click', () => {
+document.getElementById('showRulesBtn')?.addEventListener('click', () => {
     showView('rules');
 });
 
-document.getElementById('createFromListBtn').addEventListener('click', () => {
+document.getElementById('createFromListBtn')?.addEventListener('click', () => {
     showView('create');
 });
 
@@ -219,24 +295,26 @@ document.querySelectorAll('[data-view]').forEach((button) => {
     });
 });
 
-document.getElementById('closeBtn').addEventListener('click', () => {
+document.getElementById('closeBtn')?.addEventListener('click', () => {
     post('closeMenu');
 });
 
-document.getElementById('createBtn').addEventListener('click', () => {
-    errorBox.textContent = '';
+document.getElementById('createBtn')?.addEventListener('click', () => {
+    if (errorBox) {
+        errorBox.textContent = '';
+    }
 
     post('createCharacter', {
-        firstname: document.getElementById('firstname').value,
-        lastname: document.getElementById('lastname').value,
-        age: document.getElementById('age').value,
-        gender: document.getElementById('gender').value,
-        startCity: document.getElementById('startCity').value,
+        firstname: document.getElementById('firstname')?.value || '',
+        lastname: document.getElementById('lastname')?.value || '',
+        age: document.getElementById('age')?.value || 18,
+        gender: document.getElementById('gender')?.value || 'male',
+        startCity: document.getElementById('startCity')?.value || 'saintdenis',
         skin: getAppearanceData()
     });
 });
 
-confirmYes.addEventListener('click', () => {
+confirmYes?.addEventListener('click', () => {
     if (pendingConfirm) {
         pendingConfirm();
     }
@@ -244,16 +322,15 @@ confirmYes.addEventListener('click', () => {
     closeConfirm();
 });
 
-confirmNo.addEventListener('click', () => {
+confirmNo?.addEventListener('click', () => {
     closeConfirm();
 });
 
 window.addEventListener('message', (event) => {
-    const data = event.data;
+    const data = event.data || {};
 
-    if (data.action === 'open') {
+    if (data.action === 'open' || data.action === 'setCharacters') {
         currentCharacters = data.characters || [];
-
         currentCharacterId = data.currentCharacterId !== undefined && data.currentCharacterId !== null
             ? Number(data.currentCharacterId)
             : null;
@@ -269,7 +346,10 @@ window.addEventListener('message', (event) => {
         hasSelectedCharacter = Boolean(data.hasSelectedCharacter || currentCharacterId !== null);
 
         renderCharacters();
-        app.classList.remove('hidden');
+
+        if (app) {
+            app.classList.remove('hidden');
+        }
 
         if (currentCharacters.length > 0) {
             showView('characters');
@@ -279,11 +359,33 @@ window.addEventListener('message', (event) => {
     }
 
     if (data.action === 'close') {
-        app.classList.add('hidden');
+        if (app) {
+            app.classList.add('hidden');
+        }
+
         closeConfirm();
     }
 
+    if (data.action === 'setVisible') {
+        if (data.visible) {
+            if (app) {
+                app.classList.remove('hidden');
+            }
+
+            renderCharacters();
+            showView(currentCharacters.length > 0 ? 'characters' : 'main');
+        } else {
+            if (app) {
+                app.classList.add('hidden');
+            }
+
+            closeConfirm();
+        }
+    }
+
     if (data.action === 'error') {
-        errorBox.textContent = data.message || 'Ошибка';
+        if (errorBox) {
+            errorBox.textContent = data.message || 'Ошибка';
+        }
     }
 });
