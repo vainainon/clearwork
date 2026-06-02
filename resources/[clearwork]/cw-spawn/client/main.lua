@@ -1,21 +1,4 @@
-local menuSpawn = {
-    -- Временная земляная точка для первичного ped до выбора персонажа.
-    -- Если что-то пойдёт не так, игрок окажется на земле, а не в небе.
-    x = 2632.52,
-    y = -1312.31,
-    z = 51.42,
-    heading = 270.0,
-    model = 'mp_male'
-}
-
-local defaultSpawn = {
-    x = 2632.52,
-    y = -1312.31,
-    z = 51.42,
-    heading = 270.0,
-    model = 'mp_male'
-}
-
+local Config = CWSpawnConfig
 local menuSpawnReady = false
 
 local function DisableSpawnManagerAutoSpawn()
@@ -37,11 +20,13 @@ local function GetCharacterModel(character)
 end
 
 local function GetSpawnCoords(character)
+    local fallback = Config.DefaultSpawn
+
     return {
-        x = tonumber(character and character.pos_x) or defaultSpawn.x,
-        y = tonumber(character and character.pos_y) or defaultSpawn.y,
-        z = tonumber(character and character.pos_z) or defaultSpawn.z,
-        heading = tonumber(character and character.heading) or defaultSpawn.heading,
+        x = tonumber(character and character.pos_x) or fallback.x,
+        y = tonumber(character and character.pos_y) or fallback.y,
+        z = tonumber(character and character.pos_z) or fallback.z,
+        heading = tonumber(character and character.heading) or fallback.heading,
         model = GetCharacterModel(character)
     }
 end
@@ -82,7 +67,6 @@ local function SafeSetCoords(coords)
     end
 
     ped = PlayerPedId()
-
     if not ped or ped == 0 then
         return false
     end
@@ -94,13 +78,11 @@ local function SafeSetCoords(coords)
     end
 
     SetEntityHeading(ped, coords.heading or 0.0)
-
     return true
 end
 
 local function FinalizePed(coords, visible, health)
     local ped = PlayerPedId()
-
     if not ped or ped == 0 then
         return false
     end
@@ -133,6 +115,8 @@ end
 local function EnsureInitialMenuPed()
     DisableSpawnManagerAutoSpawn()
 
+    local menuSpawn = Config.MenuSpawn
+
     if menuSpawnReady then
         FinalizePed(menuSpawn, false, 200)
         return
@@ -141,7 +125,6 @@ local function EnsureInitialMenuPed()
     DoScreenFadeOut(0)
 
     local spawned = SpawnWithSpawnManager(menuSpawn)
-
     if spawned then
         Wait(900)
         FinalizePed(menuSpawn, false, 200)
@@ -156,8 +139,6 @@ end
 CreateThread(function()
     Wait(1000)
     DisableSpawnManagerAutoSpawn()
-    -- ВАЖНО: больше не создаём menu ped автоматически при старте ресурса.
-    -- Его создаёт cw-characters только на первом входе, до выбора персонажа.
 end)
 
 AddEventHandler('onClientResourceStart', function(resourceName)
@@ -167,8 +148,6 @@ AddEventHandler('onClientResourceStart', function(resourceName)
 end)
 
 RegisterNetEvent('cw-spawn:client:prepareCharacterMenu', function(firstMenu)
-    -- firstMenu=true: игрок только зашёл и ещё не выбрал персонажа.
-    -- firstMenu=false: обычный /chars во время игры. Ничего не трогаем, не телепортируем и не прячем ped.
     if firstMenu == true then
         EnsureInitialMenuPed()
     end
@@ -183,7 +162,6 @@ RegisterNetEvent('cw-spawn:client:spawnCharacter', function(character)
     Wait(350)
 
     local spawned = SpawnWithSpawnManager(coords)
-
     if spawned then
         Wait(1000)
         FinalizePed(coords, true, 200)
@@ -198,13 +176,7 @@ RegisterNetEvent('cw-spawn:client:spawnCharacter', function(character)
     DoScreenFadeIn(500)
 
     TriggerEvent('cw-spawn:client:spawnFinished', character)
-
-    print(('[cw-spawn] Spawned character at %.2f %.2f %.2f heading %.2f'):format(
-        coords.x,
-        coords.y,
-        coords.z,
-        coords.heading
-    ))
+    print(('[cw-spawn] Spawned character at %.2f %.2f %.2f heading %.2f'):format(coords.x, coords.y, coords.z, coords.heading))
 end)
 
 RegisterNetEvent('cw-spawn:client:respawnHere', function(coords)
@@ -212,7 +184,6 @@ RegisterNetEvent('cw-spawn:client:respawnHere', function(coords)
 
     local ped = PlayerPedId()
     local currentCoords = GetEntityCoords(ped)
-
     local current = coords or {
         x = currentCoords.x,
         y = currentCoords.y,
@@ -221,8 +192,9 @@ RegisterNetEvent('cw-spawn:client:respawnHere', function(coords)
         model = 'mp_male'
     }
 
-    local spawned = SpawnWithSpawnManager(current)
+    current.model = current.model or 'mp_male'
 
+    local spawned = SpawnWithSpawnManager(current)
     if spawned then
         Wait(700)
     else

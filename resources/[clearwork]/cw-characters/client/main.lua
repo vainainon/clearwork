@@ -1,3 +1,4 @@
+local Config = CWCharactersClientConfig
 local characters = {}
 local uiOpen = false
 local characterSelected = false
@@ -17,13 +18,12 @@ end
 local function Notify(message)
     TriggerEvent('chat:addMessage', {
         color = { 255, 80, 80 },
-        args = { 'Персонажи', message }
+        args = { 'Персонажи', tostring(message or '') }
     })
 end
 
 local function SetPedHiddenInCharacterMenu(state)
     local ped = PlayerPedId()
-
     if not ped or ped == 0 then
         return
     end
@@ -61,13 +61,13 @@ local function GetCurrentCoords()
 end
 
 local function ApplyBasicAppearance(character)
-    if not character then return end
+    if not character then
+        return
+    end
 
     local skin = nil
-
     if character.skin then
         local ok, decoded = pcall(json.decode, character.skin)
-
         if ok and type(decoded) == 'table' then
             skin = decoded
         end
@@ -89,12 +89,9 @@ end
 
 local function OpenUI()
     uiOpen = true
-
     SetNuiFocus(true, true)
     SetNuiFocusKeepInput(false)
 
-    -- На первом входе ped-заглушка скрыта за меню.
-    -- При обычном /chars во время игры ped НЕ прячем и НЕ телепортируем.
     if hidePedForCurrentMenu then
         SetPedHiddenInCharacterMenu(true)
     end
@@ -103,13 +100,13 @@ local function OpenUI()
         action = 'open',
         characters = characters,
         currentCharacterId = currentCharacterId,
+        activeCharacterId = currentCharacterId,
         hasSelectedCharacter = characterSelected
     })
 end
 
 local function CloseUI(unhidePed)
     uiOpen = false
-
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
 
@@ -118,10 +115,7 @@ local function CloseUI(unhidePed)
     end
 
     hidePedForCurrentMenu = false
-
-    SendNUIMessage({
-        action = 'close'
-    })
+    SendNUIMessage({ action = 'close' })
 end
 
 local function RequestCharacters(saveCurrentPosition)
@@ -142,10 +136,8 @@ local function OpenCharacterMenu()
         DoScreenFadeOut(200)
         Wait(250)
 
-        -- Только первый вход: создаём ped-заглушку через spawnmanager на земле.
         TriggerEvent('cw-spawn:client:prepareCharacterMenu', true)
         Wait(600)
-
         SetPedHiddenInCharacterMenu(true)
         RequestCharacters(false)
 
@@ -154,15 +146,12 @@ local function OpenCharacterMenu()
         return
     end
 
-    -- Обычный /chars во время игры:
-    -- не вызываем prepareCharacterMenu, не прячем ped, не переносим его в menu-spawn.
     RequestCharacters(true)
 end
 
 CreateThread(function()
     DisableSpawnManagerAutoSpawn()
-
-    Wait(5000)
+    Wait(tonumber(Config.AutoOpenDelay) or 5000)
 
     if not firstOpenDone then
         firstOpenDone = true
@@ -185,12 +174,12 @@ end, false)
 RegisterNetEvent('cw-characters:client:accountNotReady', function()
     accountRetryCount = accountRetryCount + 1
 
-    if accountRetryCount > 20 then
+    if accountRetryCount > (tonumber(Config.AccountRetryLimit) or 20) then
         Notify('Аккаунт не загрузился. Перезайди на сервер.')
         return
     end
 
-    SetTimeout(1000, function()
+    SetTimeout(tonumber(Config.AccountRetryDelay) or 1000, function()
         RequestCharacters(false)
     end)
 end)
@@ -198,36 +187,32 @@ end)
 RegisterNetEvent('cw-characters:client:receiveCharacters', function(data, serverCurrentCharacterId)
     accountRetryCount = 0
     characters = data or {}
-
     currentCharacterId = serverCurrentCharacterId and tonumber(serverCurrentCharacterId) or nil
 
     if not currentCharacterId then
         for _, character in ipairs(characters) do
-            if character.is_current == true or character.is_current == 1 or character.is_current == '1' then
+            if character.is_current == true or character.is_current == 1 or character.is_current == '1' or character.active_character == true then
                 currentCharacterId = tonumber(character.id)
                 break
             end
         end
     end
 
-    if currentCharacterId then
-        characterSelected = true
-    end
+    characterSelected = currentCharacterId ~= nil
 
     OpenUI()
 end)
 
 RegisterNetEvent('cw-characters:client:characterSelected', function(character)
-    if not character then return end
+    if not character then
+        return
+    end
 
     characterSelected = true
     currentCharacterId = tonumber(character.id)
 
-    -- Не раскрываем menu-ped до завершения cw-spawn.
-    -- Если /chars открыт во время игры, текущий ped и так стоит на месте.
     CloseUI(false)
     ApplyBasicAppearance(character)
-
     TriggerEvent('cw-spawn:client:spawnCharacter', character)
 end)
 
@@ -253,7 +238,10 @@ end)
 
 RegisterNUICallback('selectCharacter', function(data, cb)
     if data and data.id then
-        TriggerServerEvent('cw-characters:server:selectCharacter', tonumber(data.id))
+        TriggerServerEvent('cw-characters:server:selectCharacter', {
+            id = tonumber(data.id),
+            currentPosition = characterSelected and GetCurrentCoords() or nil
+        })
     end
 
     cb({ ok = true })
@@ -294,7 +282,6 @@ end)
 RegisterCommand('fixfocus', function()
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
-
     TriggerEvent('chat:addMessage', {
         color = { 120, 255, 120 },
         args = { 'ClearWork', 'Фокус сброшен.' }
@@ -310,7 +297,9 @@ AddEventHandler('onClientResourceStart', function(resourceName)
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)
-    if resourceName ~= GetCurrentResourceName() then return end
+    if resourceName ~= GetCurrentResourceName() then
+        return
+    end
 
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
