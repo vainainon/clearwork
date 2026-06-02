@@ -34,8 +34,7 @@ body {
     width: 920px;
     min-height: 560px;
     padding: 26px;
-    background:
-        linear-gradient(180deg, rgba(227, 201, 143, 0.98), rgba(200, 169, 104, 0.98));
+    background: linear-gradient(180deg, rgba(227, 201, 143, 0.98), rgba(200, 169, 104, 0.98));
     border: 6px solid #3b210f;
     box-shadow:
         0 0 0 2px #8b5a24 inset,
@@ -102,7 +101,6 @@ body {
     height: 0;
     border-left: 24px solid transparent;
     border-right: 24px solid transparent;
-    border-top: 0;
     border-bottom: 48px solid #7c0600;
     filter: drop-shadow(0 3px 0 #3b210f);
 }
@@ -247,7 +245,6 @@ body {
     background: rgba(255, 244, 205, 0.45);
     text-align: center;
     padding: 16px;
-    box-shadow: 0 0 0 1px rgba(59, 33, 15, 0.25) inset;
 }
 
 .wanted-title {
@@ -324,13 +321,7 @@ body {
 }
 
 .dead-state .death-panel {
-    background:
-        linear-gradient(180deg, rgba(210, 174, 116, 0.98), rgba(137, 72, 47, 0.98));
-}
-
-.dead-state .timer,
-.dead-state .wanted-card {
-    border-color: #6b0000;
+    background: linear-gradient(180deg, rgba(210, 174, 116, 0.98), rgba(137, 72, 47, 0.98));
 }
 
 .safe-state .hub strong {
@@ -338,17 +329,9 @@ body {
 }
 
 @keyframes pulseWanted {
-    0% {
-        transform: scale(1);
-    }
-
-    50% {
-        transform: scale(1.025);
-    }
-
-    100% {
-        transform: scale(1);
-    }
+    0% { transform: scale(1); }
+    50% { transform: scale(1.025); }
+    100% { transform: scale(1); }
 }
 
 .countdown-state .wanted-card {

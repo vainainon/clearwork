@@ -2,6 +2,7 @@ CWAdminConfig = CWAdminConfig or {}
 
 CWAdminConfig.Ace = {
     owner = 'clearwork.owner',
+
     admin = 'clearwork.admin',
 
     characters = 'clearwork.admin.characters',
@@ -59,11 +60,14 @@ CWAdminConfig.RolePermissions = {
 
     admin = {
         ['admin.open'] = true,
-
         ['dashboard.view'] = true,
 
         ['characters.search'] = true,
         ['characters.delete'] = true,
+
+        -- Перма-смерть: только owner / general / admin.
+        ['characters.permadeath'] = true,
+        ['characters.revive'] = true,
 
         ['players.list'] = true,
         ['players.goto'] = true,
@@ -71,17 +75,18 @@ CWAdminConfig.RolePermissions = {
         ['players.freeze'] = true,
         ['players.kick'] = true,
 
+        -- Возродить игрока без снятия пермакилла нельзя,
+        -- но обычный revive для живого персонажа доступен admin+.
+        ['players.revive'] = true,
+
         ['tools.use'] = true,
         ['tools.noclip'] = true
     },
 
     helper = {
         ['admin.open'] = true,
-
         ['dashboard.view'] = true,
-
         ['characters.search'] = true,
-
         ['players.list'] = true
     },
 

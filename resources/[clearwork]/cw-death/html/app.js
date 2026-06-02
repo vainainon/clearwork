@@ -16,13 +16,25 @@ let finishTimeout = null;
 let lastRotation = 0;
 let currentMode = 'hidden';
 
+function safeSet(el, value) {
+    if (el) el.textContent = value;
+}
+
+function safeClassAdd(el, name) {
+    if (el) el.classList.add(name);
+}
+
+function safeClassRemove(el, ...names) {
+    if (el) el.classList.remove(...names);
+}
+
 function show() {
-    root.classList.remove('hidden');
+    safeClassRemove(root, 'hidden');
 }
 
 function hide() {
-    root.classList.add('hidden');
-    root.classList.remove('countdown-state', 'dead-state', 'safe-state');
+    safeClassAdd(root, 'hidden');
+    safeClassRemove(root, 'countdown-state', 'dead-state', 'safe-state');
     currentMode = 'hidden';
     clearSpinTimers();
 }
@@ -67,34 +79,44 @@ function setChance(chance) {
     chance = clampChance(chance);
 
     if (chance === null) {
-        chanceValue.textContent = '—';
-        wheel.style.setProperty('--death-angle', '0deg');
+        safeSet(chanceValue, '—');
+
+        if (wheel) {
+            wheel.style.setProperty('--death-angle', '0deg');
+        }
+
         return;
     }
 
-    chanceValue.textContent = `${chance}%`;
+    safeSet(chanceValue, `${chance}%`);
 
     const angle = chance >= 100 ? 360 : chance * 3.6;
-    wheel.style.setProperty('--death-angle', `${angle}deg`);
 
-    footerLeft.textContent = `Красная зона: 1–${chance}. Зелёная зона: ${chance + 1}–100.`;
+    if (wheel) {
+        wheel.style.setProperty('--death-angle', `${angle}deg`);
+    }
+
+    safeSet(
+        footerLeft,
+        `Красная зона: 1–${chance}. Зелёная зона: ${chance + 1}–100.`
+    );
 }
 
 function setMode(mode) {
     currentMode = mode;
 
-    root.classList.remove('countdown-state', 'dead-state', 'safe-state');
+    safeClassRemove(root, 'countdown-state', 'dead-state', 'safe-state');
 
     if (mode === 'countdown') {
-        root.classList.add('countdown-state');
+        safeClassAdd(root, 'countdown-state');
     }
 
     if (mode === 'dead') {
-        root.classList.add('dead-state');
+        safeClassAdd(root, 'dead-state');
     }
 
     if (mode === 'safe') {
-        root.classList.add('safe-state');
+        safeClassAdd(root, 'safe-state');
     }
 }
 
@@ -103,23 +125,29 @@ function prepareRoulette(data) {
     show();
     setMode('countdown');
 
-    wheel.classList.remove('spinning');
-    rollValue.textContent = '—';
+    if (wheel) {
+        wheel.classList.remove('spinning');
+    }
 
-    title.textContent = 'Колесо судьбы';
-    subtitle.textContent = 'Салунная рулетка решит, останется ли персонаж в живых.';
+    safeSet(rollValue, '—');
+    safeSet(title, 'Колесо судьбы');
+    safeSet(subtitle, 'Салунная рулетка решит, останется ли персонаж в живых.');
 
     setChance(data.chance);
 
-    const countdown = Number(data.countdown || data.seconds || 5);
+    const countdown = Number(data.countdown || 5);
 
-    countdownValue.textContent = countdown;
-    timer.textContent = `До вращения колеса: ${countdown}`;
-    text.textContent = data.alreadyDead
-        ? 'Этот персонаж уже отмечен смертью. Колесо подтвердит приговор.'
-        : 'Персонаж ранен. До вращения колеса осталось несколько секунд.';
+    safeSet(countdownValue, countdown);
+    safeSet(timer, `До вращения колеса: ${countdown}`);
 
-    footerRight.textContent = 'Бросок 1–100';
+    safeSet(
+        text,
+        data.alreadyDead
+            ? 'Этот персонаж уже отмечен смертью. Колесо подтвердит приговор.'
+            : 'Персонаж ранен. До вращения колеса осталось несколько секунд.'
+    );
+
+    safeSet(footerRight, 'Бросок 1–100');
 }
 
 function updateCountdown(data) {
@@ -131,14 +159,12 @@ function updateCountdown(data) {
         setChance(data.chance);
     }
 
-    countdownValue.textContent = seconds;
-    timer.textContent = seconds > 0
-        ? `До вращения колеса: ${seconds}`
-        : 'Колесо пошло...';
+    safeSet(countdownValue, seconds);
+    safeSet(timer, seconds > 0 ? `До вращения колеса: ${seconds}` : 'Колесо пошло...');
 
     if (seconds <= 0) {
-        title.textContent = 'Ставки сделаны';
-        text.textContent = 'Колесо судьбы начинает вращение.';
+        safeSet(title, 'Ставки сделаны');
+        safeSet(text, 'Колесо судьбы начинает вращение.');
     }
 }
 
@@ -149,18 +175,20 @@ function startSpin(data) {
 
     setChance(data.chance);
 
-    wheel.classList.add('spinning');
+    if (wheel) {
+        wheel.classList.add('spinning');
+    }
 
-    title.textContent = 'Ставки сделаны';
-    subtitle.textContent = 'Колесо крутится. Красная зона означает перманентную смерть.';
-    text.textContent = 'Барабан пошёл. Сейчас выпадет число, которое решит судьбу персонажа.';
-    timer.textContent = 'Колесо вращается...';
-    countdownValue.textContent = '0';
-    footerRight.textContent = 'Колесо в движении';
+    safeSet(title, 'Ставки сделаны');
+    safeSet(subtitle, 'Колесо крутится. Красная зона означает перманентную смерть.');
+    safeSet(text, 'Барабан пошёл. Сейчас выпадет число, которое решит судьбу персонажа.');
+    safeSet(timer, 'Колесо вращается...');
+    safeSet(countdownValue, '0');
+    safeSet(footerRight, 'Колесо в движении');
 
     fakeRollInterval = setInterval(() => {
         const value = Math.floor(Math.random() * 100) + 1;
-        rollValue.textContent = String(value).padStart(2, '0');
+        safeSet(rollValue, String(value).padStart(2, '0'));
     }, 70);
 }
 
@@ -175,6 +203,11 @@ function animateToRoll(data) {
 
     if (currentMode !== 'spin') {
         startSpin({ chance });
+    }
+
+    if (!wheel) {
+        finishRollInstant(roll, chance, permanent, data.seconds || 300);
+        return;
     }
 
     const anglePerNumber = 3.6;
@@ -193,29 +226,36 @@ function animateToRoll(data) {
     lastRotation = targetRotation;
 
     finishTimeout = setTimeout(() => {
-        clearSpinTimers();
-
-        wheel.classList.remove('spinning');
-        rollValue.textContent = String(roll).padStart(2, '0');
-
-        if (permanent) {
-            setMode('dead');
-
-            title.textContent = 'Перманентная смерть';
-            subtitle.textContent = 'Колесо остановилось в красной зоне.';
-            text.textContent = `Выпал бросок ${roll}. Текущий шанс смерти был ${chance}%. Персонаж погиб навсегда.`;
-            timer.textContent = 'Оживление возможно только через вкладку Персонажи в админ-меню.';
-            footerRight.textContent = 'Приговор исполнен';
-        } else {
-            setMode('safe');
-
-            title.textContent = 'Персонаж выжил';
-            subtitle.textContent = 'Колесо миновало красную зону.';
-            text.textContent = `Выпал бросок ${roll}. Текущий шанс смерти был ${chance}%. Персонаж остаётся в нокдауне.`;
-            timer.textContent = `До подъёма: ${formatTime(data.seconds || 300)}`;
-            footerRight.textContent = 'Выжил';
-        }
+        finishRollInstant(roll, chance, permanent, data.seconds || 300);
     }, 5850);
+}
+
+function finishRollInstant(roll, chance, permanent, seconds) {
+    clearSpinTimers();
+
+    if (wheel) {
+        wheel.classList.remove('spinning');
+    }
+
+    safeSet(rollValue, String(roll).padStart(2, '0'));
+
+    if (permanent) {
+        setMode('dead');
+
+        safeSet(title, 'Перманентная смерть');
+        safeSet(subtitle, 'Колесо остановилось в красной зоне.');
+        safeSet(text, `Выпал бросок ${roll}. Текущий шанс смерти был ${chance}%. Персонаж погиб навсегда.`);
+        safeSet(timer, 'Оживление возможно только через вкладку Персонажи в админ-меню.');
+        safeSet(footerRight, 'Приговор исполнен');
+    } else {
+        setMode('safe');
+
+        safeSet(title, 'Персонаж выжил');
+        safeSet(subtitle, 'Колесо миновало красную зону.');
+        safeSet(text, `Выпал бросок ${roll}. Текущий шанс смерти был ${chance}%. Персонаж остаётся в нокдауне.`);
+        safeSet(timer, `До подъёма: ${formatTime(seconds || 300)}`);
+        safeSet(footerRight, 'Выжил');
+    }
 }
 
 function updateDownedTimer(data) {
@@ -224,15 +264,23 @@ function updateDownedTimer(data) {
     }
 
     if (data.permanent) {
-        timer.textContent = 'Персонаж мёртв навсегда.';
+        safeSet(timer, 'Персонаж мёртв навсегда.');
         return;
     }
 
-    timer.textContent = `До подъёма: ${formatTime(data.seconds || 0)}`;
+    safeSet(timer, `До подъёма: ${formatTime(data.seconds || 0)}`);
 }
 
 window.addEventListener('message', (event) => {
     const data = event.data || {};
+
+    if (data.action === 'roulette:start') {
+        prepareRoulette({
+            chance: data.chance,
+            countdown: 5,
+            seconds: data.seconds || 300
+        });
+    }
 
     if (data.action === 'roulette:prepare') {
         prepareRoulette(data);
