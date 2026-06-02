@@ -21,9 +21,7 @@ body {
     align-items: center;
     justify-content: center;
     pointer-events: none;
-    background:
-        radial-gradient(circle at center, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.82)),
-        rgba(12, 7, 3, 0.28);
+    background: radial-gradient(circle at center, rgba(0, 0, 0, 0.12), rgba(0, 0, 0, 0.82)), rgba(12, 7, 3, 0.28);
 }
 
 .death-panel {
@@ -112,9 +110,7 @@ body {
     transition: transform 5.7s cubic-bezier(0.12, 0.72, 0.08, 1);
 }
 
-.wheel.spinning {
-    filter: drop-shadow(0 0 18px rgba(124, 6, 0, 0.38));
-}
+.wheel.spinning { filter: drop-shadow(0 0 18px rgba(124, 6, 0, 0.38)); }
 
 .wheel-face {
     position: relative;
@@ -125,16 +121,8 @@ body {
     overflow: hidden;
     background:
         radial-gradient(circle at center, transparent 0 31%, rgba(0, 0, 0, 0.18) 32% 34%, transparent 35%),
-        repeating-conic-gradient(
-            from 0deg,
-            rgba(241, 223, 170, 0.26) 0deg 1.2deg,
-            rgba(0, 0, 0, 0.06) 1.2deg 3.6deg
-        ),
-        conic-gradient(
-            from 0deg,
-            #7c0600 0deg var(--death-angle),
-            #244f2b var(--death-angle) 360deg
-        );
+        repeating-conic-gradient(from 0deg, rgba(241, 223, 170, 0.26) 0deg 1.2deg, rgba(0, 0, 0, 0.06) 1.2deg 3.6deg),
+        conic-gradient(from 0deg, #7c0600 0deg var(--death-angle), #244f2b var(--death-angle) 360deg);
 }
 
 .wheel-face::before {
@@ -150,9 +138,7 @@ body {
     position: absolute;
     inset: 0;
     border-radius: 50%;
-    background:
-        radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.18), transparent 24%),
-        radial-gradient(circle at center, transparent 0 58%, rgba(0, 0, 0, 0.28) 100%);
+    background: radial-gradient(circle at 34% 24%, rgba(255, 255, 255, 0.18), transparent 24%), radial-gradient(circle at center, transparent 0 58%, rgba(0, 0, 0, 0.28) 100%);
 }
 
 .wheel-label {
@@ -291,13 +277,8 @@ body {
     font-style: italic;
 }
 
-.dead-state .death-panel {
-    background: linear-gradient(180deg, rgba(210, 174, 116, 0.98), rgba(137, 72, 47, 0.98));
-}
-
-.safe-state .hub strong {
-    color: #0b4b18;
-}
+.dead-state .death-panel { background: linear-gradient(180deg, rgba(210, 174, 116, 0.98), rgba(137, 72, 47, 0.98)); }
+.safe-state .hub strong { color: #0b4b18; }
 
 @keyframes pulseWanted {
     0% { transform: scale(1); }
@@ -305,6 +286,4 @@ body {
     100% { transform: scale(1); }
 }
 
-.countdown-state .wanted-card {
-    animation: pulseWanted 1s ease-in-out infinite;
-}
+.countdown-state .wanted-card { animation: pulseWanted 1s ease-in-out infinite; }

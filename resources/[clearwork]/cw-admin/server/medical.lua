@@ -25,15 +25,8 @@ local function EnsureSchema()
         VALUES ('permadeath_chance', '15');
     ]])
 
-    MySQL.query.await([[
-        ALTER TABLE characters
-        ADD COLUMN IF NOT EXISTS is_dead TINYINT(1) NOT NULL DEFAULT 0;
-    ]])
-
-    MySQL.query.await([[
-        ALTER TABLE characters
-        ADD COLUMN IF NOT EXISTS revived_at DATETIME NULL;
-    ]])
+    MySQL.query.await([[ALTER TABLE characters ADD COLUMN IF NOT EXISTS is_dead TINYINT(1) NOT NULL DEFAULT 0;]])
+    MySQL.query.await([[ALTER TABLE characters ADD COLUMN IF NOT EXISTS revived_at DATETIME NULL;]])
 end
 
 local function GetPermadeathChance()
@@ -58,25 +51,16 @@ local function SetPermadeathChance(value)
 end
 
 local function CanManagePermadeath(src)
-    if src == 0 then
-        return true
-    end
+    if src == 0 then return true end
 
-    if CWAdmin.HasPermission(src, 'characters.revive') or CWAdmin.HasPermission(src, 'characters.permadeath') then
-        return true
-    end
-
-    local role = CWAdmin.GetAdminRole and CWAdmin.GetAdminRole(src) or nil
+    local role = CWAdmin.GetAdminRole(src)
 
     return role == 'owner' or role == 'general' or role == 'admin'
 end
 
 local function GetServerCoords(src)
     local ped = GetPlayerPed(src)
-
-    if not ped or ped == 0 then
-        return nil
-    end
+    if not ped or ped == 0 then return nil end
 
     local coords = GetEntityCoords(ped)
 
@@ -139,10 +123,7 @@ RegisterNetEvent('cw-admin:server:medical:setPermadeathChance', function(value)
 
     local chance = SetPermadeathChance(value)
 
-    CWAdmin.AdminLog(src, 'set_permadeath_chance', {
-        chance = chance
-    })
-
+    CWAdmin.AdminLog(src, 'set_permadeath_chance', { chance = chance })
     CWAdmin.SendSuccess(src, 'Шанс перманентной смерти установлен: ' .. chance .. '%')
 
     TriggerClientEvent('cw-admin:client:medical:settings', src, {
@@ -237,9 +218,6 @@ RegisterNetEvent('cw-admin:server:medical:reviveCharacter', function(characterId
         onlinePlayer.character.revived_at = os.date('%Y-%m-%d %H:%M:%S')
     end
 
-    CWAdmin.AdminLog(src, 'revive_character', {
-        character = characterId
-    })
-
+    CWAdmin.AdminLog(src, 'revive_character', { character = characterId })
     CWAdmin.SendSuccess(src, 'Пермакилл снят. Теперь игрок сможет выбрать персонажа через /chars и возродиться.')
 end)

@@ -40,15 +40,8 @@ local function EnsureSchema()
         VALUES ('permadeath_chance', '15');
     ]])
 
-    MySQL.query.await([[
-        ALTER TABLE characters
-        ADD COLUMN IF NOT EXISTS is_dead TINYINT(1) NOT NULL DEFAULT 0;
-    ]])
-
-    MySQL.query.await([[
-        ALTER TABLE characters
-        ADD COLUMN IF NOT EXISTS revived_at DATETIME NULL;
-    ]])
+    MySQL.query.await([[ALTER TABLE characters ADD COLUMN IF NOT EXISTS is_dead TINYINT(1) NOT NULL DEFAULT 0;]])
+    MySQL.query.await([[ALTER TABLE characters ADD COLUMN IF NOT EXISTS revived_at DATETIME NULL;]])
 end
 
 local function GetPermadeathChance()
@@ -77,10 +70,7 @@ local function GetCWPlayer(src)
         return exports['cw-core']:GetPlayer(src)
     end)
 
-    if ok then
-        return player
-    end
-
+    if ok then return player end
     return nil
 end
 
@@ -174,9 +164,7 @@ RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
     local src = source
     local state = activeKnockdowns[src]
 
-    if not state or state.rolled then
-        return
-    end
+    if not state or state.rolled then return end
 
     local player = GetCWPlayer(src)
 
@@ -210,11 +198,7 @@ RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
     end)
 
     if not ok then
-        print(('[cw-death] Failed to set permadeath for character %s: %s'):format(
-            tostring(state.characterId),
-            tostring(err)
-        ))
-
+        print(('[cw-death] Failed to set permadeath for character %s: %s'):format(tostring(state.characterId), tostring(err)))
         permadeath = false
     end
 

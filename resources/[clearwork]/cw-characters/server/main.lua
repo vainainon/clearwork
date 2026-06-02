@@ -1,35 +1,8 @@
 local SpawnCities = {
-    saintdenis = {
-        label = 'Saint Denis',
-        x = 2632.52,
-        y = -1312.31,
-        z = 51.42,
-        heading = 270.0
-    },
-
-    rhodes = {
-        label = 'Rhodes',
-        x = 1230.92,
-        y = -1298.34,
-        z = 76.90,
-        heading = 140.0
-    },
-
-    vanhorn = {
-        label = 'Van Horn',
-        x = 2981.54,
-        y = 570.16,
-        z = 44.63,
-        heading = 80.0
-    },
-
-    annesburg = {
-        label = 'Annesburg',
-        x = 2932.58,
-        y = 1350.25,
-        z = 44.64,
-        heading = 250.0
-    }
+    saintdenis = { label = 'Saint Denis', x = 2632.52, y = -1312.31, z = 51.42, heading = 270.0 },
+    rhodes = { label = 'Rhodes', x = 1230.92, y = -1298.34, z = 76.90, heading = 140.0 },
+    vanhorn = { label = 'Van Horn', x = 2981.54, y = 570.16, z = 44.63, heading = 80.0 },
+    annesburg = { label = 'Annesburg', x = 2932.58, y = 1350.25, z = 44.64, heading = 250.0 }
 }
 
 local MAX_CHARACTERS = 3
@@ -39,23 +12,13 @@ local function GetCWPlayer(src)
         return exports['cw-core']:GetPlayer(src)
     end)
 
-    if ok then
-        return player
-    end
-
+    if ok then return player end
     return nil
 end
 
 local function EnsureSchema()
-    MySQL.query.await([[
-        ALTER TABLE characters
-        ADD COLUMN IF NOT EXISTS is_dead TINYINT(1) NOT NULL DEFAULT 0;
-    ]])
-
-    MySQL.query.await([[
-        ALTER TABLE characters
-        ADD COLUMN IF NOT EXISTS revived_at DATETIME NULL;
-    ]])
+    MySQL.query.await([[ALTER TABLE characters ADD COLUMN IF NOT EXISTS is_dead TINYINT(1) NOT NULL DEFAULT 0;]])
+    MySQL.query.await([[ALTER TABLE characters ADD COLUMN IF NOT EXISTS revived_at DATETIME NULL;]])
 end
 
 local function CleanupDeletedCharacters(accountId)
@@ -94,10 +57,7 @@ local function GetCharacters(accountId)
 end
 
 local function GetCurrentCharacterId(player)
-    if type(player) ~= 'table' or type(player.character) ~= 'table' then
-        return nil
-    end
-
+    if type(player) ~= 'table' or type(player.character) ~= 'table' then return nil end
     return tonumber(player.character.id)
 end
 
@@ -131,16 +91,11 @@ local function GetFreeSlot(characters)
 
     for _, character in ipairs(characters or {}) do
         local slot = tonumber(character.slot)
-
-        if slot then
-            usedSlots[slot] = true
-        end
+        if slot then usedSlots[slot] = true end
     end
 
     for slot = 1, MAX_CHARACTERS do
-        if not usedSlots[slot] then
-            return slot
-        end
+        if not usedSlots[slot] then return slot end
     end
 
     return nil
@@ -167,9 +122,7 @@ RegisterNetEvent('cw-characters:server:createCharacter', function(data)
     local src = source
     local player = GetCWPlayer(src)
 
-    if not player or type(data) ~= 'table' then
-        return
-    end
+    if not player or type(data) ~= 'table' then return end
 
     local characters = GetCharacters(player.account_id)
 
@@ -230,21 +183,13 @@ RegisterNetEvent('cw-characters:server:createCharacter', function(data)
     end)
 
     if not ok then
-        print(('[cw-characters] Create character failed for account %s: %s'):format(
-            tostring(player.account_id),
-            tostring(characterId)
-        ))
-
+        print(('[cw-characters] Create character failed for account %s: %s'):format(tostring(player.account_id), tostring(characterId)))
         TriggerClientEvent('cw-characters:client:createFailed', src, 'Не удалось создать персонажа. Попробуй ещё раз.')
         SendCharacters(src, player)
         return
     end
 
-    print(('[cw-characters] Created character %s for account %s in slot %s'):format(
-        characterId,
-        player.account_id,
-        slot
-    ))
+    print(('[cw-characters] Created character %s for account %s in slot %s'):format(characterId, player.account_id, slot))
 
     TriggerClientEvent('cw-characters:client:createSuccess', src)
     SendCharacters(src, player)
@@ -254,15 +199,10 @@ RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(charact
     local src = source
     local player = GetCWPlayer(src)
 
-    if not player then
-        return
-    end
+    if not player then return end
 
     characterId = tonumber(characterId)
-
-    if not characterId then
-        return
-    end
+    if not characterId then return end
 
     local character = MySQL.single.await([[
         SELECT
@@ -317,11 +257,6 @@ RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(charact
         player.character = nil
     end
 
-    print(('[cw-characters] Delete requested for character %s by account %s'):format(
-        characterId,
-        player.account_id
-    ))
-
     SendCharacters(src, player)
 end)
 
@@ -329,15 +264,10 @@ RegisterNetEvent('cw-characters:server:cancelDeleteCharacter', function(characte
     local src = source
     local player = GetCWPlayer(src)
 
-    if not player then
-        return
-    end
+    if not player then return end
 
     characterId = tonumber(characterId)
-
-    if not characterId then
-        return
-    end
+    if not characterId then return end
 
     local character = MySQL.single.await([[
         SELECT
@@ -367,11 +297,6 @@ RegisterNetEvent('cw-characters:server:cancelDeleteCharacter', function(characte
           AND account_id = ?
     ]], { characterId, player.account_id })
 
-    print(('[cw-characters] Delete cancelled for character %s by account %s'):format(
-        characterId,
-        player.account_id
-    ))
-
     SendCharacters(src, player)
 end)
 
@@ -379,15 +304,10 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(characterId)
     local src = source
     local player = GetCWPlayer(src)
 
-    if not player then
-        return
-    end
+    if not player then return end
 
     characterId = tonumber(characterId)
-
-    if not characterId then
-        return
-    end
+    if not characterId then return end
 
     if player.character and tonumber(player.character.id) == characterId then
         SendCharacters(src, player)
@@ -453,12 +373,9 @@ RegisterNetEvent('cw-characters:server:clearSelectedCharacter', function()
     local src = source
     local player = GetCWPlayer(src)
 
-    if not player then
-        return
-    end
+    if not player then return end
 
     exports['cw-core']:ClearCharacter(src)
-
     print(('[cw-characters] Cleared selected character for %s'):format(player.name))
 end)
 
@@ -473,13 +390,6 @@ RegisterNetEvent('cw-characters:server:openCharacterMenu', function(coords)
 
     if player.character and type(coords) == 'table' then
         exports['cw-core']:SaveCharacterPosition(src, coords)
-
-        print(('[cw-characters] Saved position before opening character menu: %s %.2f %.2f %.2f'):format(
-            player.character.id,
-            tonumber(coords.x) or 0.0,
-            tonumber(coords.y) or 0.0,
-            tonumber(coords.z) or 0.0
-        ))
     end
 
     SendCharacters(src, player)

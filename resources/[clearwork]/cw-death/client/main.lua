@@ -47,44 +47,8 @@ local function SetInvincible(state)
     end
 end
 
-local function SafeResurrect(coords, health)
-    coords = coords or GetCurrentCoords()
-
-    local ped = PlayerPedId()
-
-    if type(NetworkResurrectLocalPlayer) == 'function' then
-        NetworkResurrectLocalPlayer(coords.x, coords.y, coords.z, coords.heading or 0.0, true, false)
-        Wait(100)
-    elseif type(ResurrectPed) == 'function' then
-        ResurrectPed(ped)
-        Wait(100)
-    end
-
-    ped = PlayerPedId()
-
-    if type(SetEntityCoordsNoOffset) == 'function' then
-        SetEntityCoordsNoOffset(ped, coords.x, coords.y, coords.z, false, false, false)
-    else
-        SetEntityCoords(ped, coords.x, coords.y, coords.z, false, false, false, false)
-    end
-
-    SetEntityHeading(ped, coords.heading or 0.0)
-    SetEntityVisible(ped, true, false)
-    SetEntityCollision(ped, true, true)
-    FreezeEntityPosition(ped, false)
-    SetEntityHealth(ped, health or 200)
-
-    if type(ResetEntityAlpha) == 'function' then
-        ResetEntityAlpha(ped)
-    else
-        SetEntityAlpha(ped, 255, false)
-    end
-end
-
 local function IsPedDead(ped)
-    if IsEntityDead(ped) then
-        return true
-    end
+    if IsEntityDead(ped) then return true end
 
     if type(IsPedFatallyInjured) == 'function' and IsPedFatallyInjured(ped) then
         return true
@@ -112,26 +76,21 @@ local function ResetDeathState(hideUi)
 end
 
 local function EndKnockdown()
-    if permanentDead then
-        return
-    end
+    if permanentDead then return end
 
     local coords = downCoords or GetCurrentCoords()
 
     ResetDeathState(true)
-    SafeResurrect(coords, 200)
+    TriggerEvent('cw-spawn:client:respawnHere', coords)
     ClearPedTasksImmediately(PlayerPedId())
 
     TriggerServerEvent('cw-death:server:saveDownedPosition', coords)
 end
 
 local function BeginKnockdown()
-    if isDowned or waitingRoll then
-        return
-    end
+    if isDowned or waitingRoll then return end
 
     DisableSpawnManagerAutoSpawn()
-
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
 
@@ -151,7 +110,7 @@ local function BeginKnockdown()
     nextRagdollTick = 0
 
     SetInvincible(true)
-    SafeResurrect(downCoords, 101)
+    TriggerEvent('cw-spawn:client:respawnHere', downCoords)
 
     ShowUi('roulette:prepare', {
         chance = nil,
@@ -164,7 +123,6 @@ end
 
 CreateThread(function()
     DisableSpawnManagerAutoSpawn()
-
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
     ShowUi('downed:hide')
@@ -175,7 +133,7 @@ CreateThread(function()
         if not isDowned and not waitingRoll then
             local ped = PlayerPedId()
 
-            if DoesEntityExist(ped) and IsPedDead(ped) then
+            if ped and ped ~= 0 and DoesEntityExist(ped) and IsPedDead(ped) then
                 BeginKnockdown()
             end
         end
@@ -188,21 +146,18 @@ CreateThread(function()
             local now = GetGameTimer()
             local ped = PlayerPedId()
 
-            -- Нельзя использовать DisableAllControlActions(0), иначе ломаются чат, /chars и камера.
+            -- Не используем DisableAllControlActions(0), иначе ломаются чат, /chars и камера.
             SetNuiFocus(false, false)
             SetNuiFocusKeepInput(false)
             SetInvincible(true)
 
             if now >= nextRagdollTick then
-                if IsPedDead(ped) then
-                    SafeResurrect(downCoords or GetCurrentCoords(), 101)
-                    ped = PlayerPedId()
-                end
+                if ped and ped ~= 0 then
+                    SetEntityHealth(ped, 101)
 
-                SetEntityHealth(ped, 101)
-
-                if type(SetPedToRagdoll) == 'function' then
-                    SetPedToRagdoll(ped, 1200, 1200, 0, true, true, false)
+                    if type(SetPedToRagdoll) == 'function' then
+                        SetPedToRagdoll(ped, 1200, 1200, 0, true, true, false)
+                    end
                 end
 
                 nextRagdollTick = now + 1000
@@ -304,7 +259,7 @@ RegisterNetEvent('cw-death:client:adminRevive', function(coords)
     downCoords = coords or downCoords or GetCurrentCoords()
 
     ResetDeathState(true)
-    SafeResurrect(downCoords, 200)
+    TriggerEvent('cw-spawn:client:respawnHere', downCoords)
     ClearPedTasksImmediately(PlayerPedId())
 
     TriggerServerEvent('cw-death:server:saveDownedPosition', downCoords)
@@ -313,16 +268,6 @@ end)
 AddEventHandler('cw-spawn:client:spawnFinished', function()
     ResetDeathState(true)
 end)
-
-RegisterCommand('fixfocus', function()
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
-
-    TriggerEvent('chat:addMessage', {
-        color = { 120, 255, 120 },
-        args = { 'ClearWork', 'Фокус сброшен.' }
-    })
-end, false)
 
 AddEventHandler('onClientResourceStart', function(resourceName)
     if resourceName == GetCurrentResourceName() then

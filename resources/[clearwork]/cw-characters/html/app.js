@@ -36,9 +36,7 @@ function showView(name) {
         }
     });
 
-    if (errorBox) {
-        errorBox.textContent = '';
-    }
+    if (errorBox) errorBox.textContent = '';
 }
 
 function openConfirm(text, onConfirm) {
@@ -51,10 +49,7 @@ function openConfirm(text, onConfirm) {
 
 function closeConfirm() {
     pendingConfirm = null;
-
-    if (modal) {
-        modal.classList.add('hidden');
-    }
+    if (modal) modal.classList.add('hidden');
 }
 
 function getAppearanceData() {
@@ -68,19 +63,13 @@ function getAppearanceData() {
 }
 
 function getDeleteStatus(character) {
-    if (!character.delete_requested_at) {
-        return null;
-    }
+    if (!character.delete_requested_at) return null;
 
     const minutes = Number(character.delete_minutes_passed || 0);
     const cancelAvailable = minutes <= 60;
     const hoursLeft = Math.max(0, 12 - Math.floor(minutes / 60));
 
-    return {
-        minutes,
-        cancelAvailable,
-        hoursLeft
-    };
+    return { minutes, cancelAvailable, hoursLeft };
 }
 
 function isCurrentCharacter(character) {
@@ -110,7 +99,6 @@ function renderCharacters() {
                 <p>Создай первого жителя Лемойна.</p>
             </div>
         `;
-
         return;
     }
 
@@ -121,19 +109,13 @@ function renderCharacters() {
         const isCurrent = isCurrentCharacter(character);
         const isDead = isDeadCharacter(character);
         const isRevived = isRevivedCharacter(character);
-
         const canRequestDelete = isDead || ageDays >= 7;
 
         const card = document.createElement('div');
         card.className = 'character-card';
 
-        if (isCurrent) {
-            card.classList.add('current-character');
-        }
-
-        if (isDead) {
-            card.classList.add('dead-character');
-        }
+        if (isCurrent) card.classList.add('current-character');
+        if (isDead) card.classList.add('dead-character');
 
         let statusHtml = '';
 
@@ -205,65 +187,44 @@ function renderCharacters() {
 
         card.innerHTML = `
             <h3>${character.firstname} ${character.lastname}</h3>
-
             <p>Возраст: ${character.age}</p>
             <p>Пол: ${character.gender}</p>
             <p>Наличные: $${character.cash}</p>
-
             ${statusHtml}
             ${actionsHtml}
         `;
 
         const selectBtn = card.querySelector('.select-btn');
-
         if (selectBtn) {
             selectBtn.addEventListener('click', () => {
-                if (isCurrent || isDead || status) {
-                    return;
-                }
-
-                post('selectCharacter', {
-                    id: character.id
-                });
+                if (isCurrent || isDead || status) return;
+                post('selectCharacter', { id: character.id });
             });
         }
 
         const deleteBtn = card.querySelector('.delete-btn');
-
         if (deleteBtn) {
             deleteBtn.addEventListener('click', () => {
-                if (deleteBtn.disabled) {
-                    return;
-                }
-
-                if (isCurrent && !isDead) {
-                    return;
-                }
+                if (deleteBtn.disabled) return;
+                if (isCurrent && !isDead) return;
 
                 const deadText = isDead
                     ? `Персонаж ${character.firstname} ${character.lastname} убит. Поставить его на удаление?`
                     : `Поставить персонажа ${character.firstname} ${character.lastname} на удаление? Окончательное удаление произойдёт через 12 часов. Отменить можно только в первый час.`;
 
                 openConfirm(deadText, () => {
-                    post('requestDeleteCharacter', {
-                        id: character.id
-                    });
+                    post('requestDeleteCharacter', { id: character.id });
                 });
             });
         }
 
         const cancelDeleteBtn = card.querySelector('.cancel-delete-btn');
-
         if (cancelDeleteBtn) {
             cancelDeleteBtn.addEventListener('click', () => {
-                if (cancelDeleteBtn.disabled || isCurrent) {
-                    return;
-                }
+                if (cancelDeleteBtn.disabled || isCurrent) return;
 
                 openConfirm(`Отменить удаление персонажа ${character.firstname} ${character.lastname}?`, () => {
-                    post('cancelDeleteCharacter', {
-                        id: character.id
-                    });
+                    post('cancelDeleteCharacter', { id: character.id });
                 });
             });
         }
@@ -277,32 +238,18 @@ document.getElementById('showCharactersBtn')?.addEventListener('click', () => {
     showView('characters');
 });
 
-document.getElementById('showCreateBtn')?.addEventListener('click', () => {
-    showView('create');
-});
-
-document.getElementById('showRulesBtn')?.addEventListener('click', () => {
-    showView('rules');
-});
-
-document.getElementById('createFromListBtn')?.addEventListener('click', () => {
-    showView('create');
-});
+document.getElementById('showCreateBtn')?.addEventListener('click', () => showView('create'));
+document.getElementById('showRulesBtn')?.addEventListener('click', () => showView('rules'));
+document.getElementById('createFromListBtn')?.addEventListener('click', () => showView('create'));
 
 document.querySelectorAll('[data-view]').forEach((button) => {
-    button.addEventListener('click', () => {
-        showView(button.dataset.view);
-    });
+    button.addEventListener('click', () => showView(button.dataset.view));
 });
 
-document.getElementById('closeBtn')?.addEventListener('click', () => {
-    post('closeMenu');
-});
+document.getElementById('closeBtn')?.addEventListener('click', () => post('closeMenu'));
 
 document.getElementById('createBtn')?.addEventListener('click', () => {
-    if (errorBox) {
-        errorBox.textContent = '';
-    }
+    if (errorBox) errorBox.textContent = '';
 
     post('createCharacter', {
         firstname: document.getElementById('firstname')?.value || '',
@@ -315,16 +262,11 @@ document.getElementById('createBtn')?.addEventListener('click', () => {
 });
 
 confirmYes?.addEventListener('click', () => {
-    if (pendingConfirm) {
-        pendingConfirm();
-    }
-
+    if (pendingConfirm) pendingConfirm();
     closeConfirm();
 });
 
-confirmNo?.addEventListener('click', () => {
-    closeConfirm();
-});
+confirmNo?.addEventListener('click', closeConfirm);
 
 window.addEventListener('message', (event) => {
     const data = event.data || {};
@@ -344,48 +286,29 @@ window.addEventListener('message', (event) => {
         }
 
         hasSelectedCharacter = Boolean(data.hasSelectedCharacter || currentCharacterId !== null);
-
         renderCharacters();
 
-        if (app) {
-            app.classList.remove('hidden');
-        }
-
-        if (currentCharacters.length > 0) {
-            showView('characters');
-        } else {
-            showView('main');
-        }
+        if (app) app.classList.remove('hidden');
+        showView(currentCharacters.length > 0 ? 'characters' : 'main');
     }
 
     if (data.action === 'close') {
-        if (app) {
-            app.classList.add('hidden');
-        }
-
+        if (app) app.classList.add('hidden');
         closeConfirm();
     }
 
     if (data.action === 'setVisible') {
         if (data.visible) {
-            if (app) {
-                app.classList.remove('hidden');
-            }
-
+            if (app) app.classList.remove('hidden');
             renderCharacters();
             showView(currentCharacters.length > 0 ? 'characters' : 'main');
         } else {
-            if (app) {
-                app.classList.add('hidden');
-            }
-
+            if (app) app.classList.add('hidden');
             closeConfirm();
         }
     }
 
     if (data.action === 'error') {
-        if (errorBox) {
-            errorBox.textContent = data.message || 'Ошибка';
-        }
+        if (errorBox) errorBox.textContent = data.message || 'Ошибка';
     }
 });

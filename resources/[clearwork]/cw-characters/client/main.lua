@@ -23,6 +23,10 @@ end
 local function SetPedHiddenInCharacterMenu(state)
     local ped = PlayerPedId()
 
+    if not ped or ped == 0 then
+        return
+    end
+
     FreezeEntityPosition(ped, state)
     SetEntityVisible(ped, not state, false)
     SetEntityCollision(ped, not state, not state)
@@ -93,12 +97,15 @@ local function OpenUI()
     })
 end
 
-local function CloseUI()
+local function CloseUI(unhidePed)
     uiOpen = false
 
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
-    SetPedHiddenInCharacterMenu(false)
+
+    if unhidePed ~= false then
+        SetPedHiddenInCharacterMenu(false)
+    end
 
     SendNUIMessage({
         action = 'close'
@@ -116,11 +123,17 @@ end
 local function OpenCharacterMenu()
     DisableSpawnManagerAutoSpawn()
 
+    local firstMenu = not characterSelected
+
     DoScreenFadeOut(200)
     Wait(250)
 
-    SetPedHiddenInCharacterMenu(true)
+    -- Если персонажа ещё нет, создаём настоящий ped через spawnmanager в скрытой skybox-точке.
+    -- Если персонаж уже выбран, просто прячем текущего ped и сохраняем его позицию.
+    TriggerEvent('cw-spawn:client:prepareCharacterMenu', firstMenu)
+    Wait(firstMenu and 600 or 50)
 
+    SetPedHiddenInCharacterMenu(true)
     RequestCharacters(characterSelected)
 
     Wait(250)
@@ -130,7 +143,7 @@ end
 CreateThread(function()
     DisableSpawnManagerAutoSpawn()
 
-    Wait(4500)
+    Wait(5000)
 
     if not firstOpenDone then
         firstOpenDone = true
@@ -191,7 +204,8 @@ RegisterNetEvent('cw-characters:client:characterSelected', function(character)
     characterSelected = true
     currentCharacterId = tonumber(character.id)
 
-    CloseUI()
+    -- Важно: не раскрываем skybox-ped до завершения cw-spawn.
+    CloseUI(false)
     ApplyBasicAppearance(character)
 
     TriggerEvent('cw-spawn:client:spawnCharacter', character)
@@ -248,7 +262,7 @@ end)
 
 RegisterNUICallback('closeMenu', function(_, cb)
     if characterSelected then
-        CloseUI()
+        CloseUI(true)
         cb({ ok = true })
         return
     end
@@ -256,6 +270,16 @@ RegisterNUICallback('closeMenu', function(_, cb)
     Notify('Сначала выбери или создай персонажа.')
     cb({ ok = false })
 end)
+
+RegisterCommand('fixfocus', function()
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+
+    TriggerEvent('chat:addMessage', {
+        color = { 120, 255, 120 },
+        args = { 'ClearWork', 'Фокус сброшен.' }
+    })
+end, false)
 
 AddEventHandler('onClientResourceStart', function(resourceName)
     if resourceName == GetCurrentResourceName() then
