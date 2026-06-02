@@ -10,8 +10,8 @@
     var groundEl = document.getElementById('ground');
     var selectionInfo = document.getElementById('selectionInfo');
 
-    var APP_VERSION = 'v27-ground-fit-stable-logs';
-    var CELL = 48;
+    var APP_VERSION = 'v28-single-main-paperdoll';
+    var CELL = 52;
     var GROUND_CELL = 38;
     var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {}, ground: null };
     var selected = null;
@@ -485,12 +485,14 @@
         return true;
     }
 
-    function renderEquipment() {
+    
+function renderEquipment() {
         equipmentEl.innerHTML = '';
         (state.equipmentSlots || []).forEach(function (slot) {
+            var slotId = String(slot.id || 'slot');
             var box = document.createElement('div');
-            box.className = 'equip-slot';
-            box.dataset.slot = slot.id;
+            box.className = 'equip-slot slot-' + slotId.replace(/[^a-z0-9_\-]/gi, '_');
+            box.dataset.slot = slotId;
 
             var item = state.equipment ? state.equipment[slot.id] : null;
             box.innerHTML = '<div class="slot-title">' + escapeHtml(slot.label || slot.id) + '</div>';
@@ -499,7 +501,7 @@
                 var itemEl = document.createElement('div');
                 itemEl.className = 'equip-item ' + escapeHtml(item.type || '');
                 itemEl.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
-                    '<div class="item-meta"></div>';
+                    '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) : '') + '</div>';
                 itemEl.addEventListener('mousedown', function (e) { startItemMouseDrag(e, item); });
                 itemEl.addEventListener('mouseenter', function () { showItemInfo(item); });
                 itemEl.addEventListener('mouseleave', function () { if (!customDrag) showItemInfo(null); });
@@ -518,7 +520,7 @@
 
     function renderContainer(container) {
         var wrap = document.createElement('div');
-        wrap.className = 'container-box';
+        wrap.className = 'container-box main-container-box';
         wrap.innerHTML = '<div class="container-head"><b>' + escapeHtml(container.label || container.id) + '</b><span>' +
             escapeHtml(container.width) + 'x' + escapeHtml(container.height) + '</span></div>';
 
@@ -544,10 +546,10 @@
             if (item.container_id !== container.id || item.equip_slot) return;
             var el = document.createElement('div');
             el.className = 'grid-item ' + escapeHtml(item.type || '');
-            el.style.left = (Number(item.x || 0) * GROUND_CELL) + 'px';
-            el.style.top = (Number(item.y || 0) * GROUND_CELL) + 'px';
-            el.style.width = (Number(item.width || 1) * GROUND_CELL) + 'px';
-            el.style.height = (Number(item.height || 1) * GROUND_CELL) + 'px';
+            el.style.left = (Number(item.x || 0) * CELL) + 'px';
+            el.style.top = (Number(item.y || 0) * CELL) + 'px';
+            el.style.width = (Number(item.width || 1) * CELL) + 'px';
+            el.style.height = (Number(item.height || 1) * CELL) + 'px';
             el.title = itemLabel(item) + '\n' + (item.description || '');
             el.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                 '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) : '') + '</div>';
@@ -597,10 +599,10 @@
         (ground.items || []).forEach(function (item) {
             var el = document.createElement('div');
             el.className = 'ground-item ' + escapeHtml(item.type || '');
-            el.style.left = (Number(item.x || 0) * GROUND_CELL) + 'px';
-            el.style.top = (Number(item.y || 0) * GROUND_CELL) + 'px';
-            el.style.width = (Number(item.width || 1) * GROUND_CELL) + 'px';
-            el.style.height = (Number(item.height || 1) * GROUND_CELL) + 'px';
+            el.style.left = (Number(item.x || 0) * CELL) + 'px';
+            el.style.top = (Number(item.y || 0) * CELL) + 'px';
+            el.style.width = (Number(item.width || 1) * CELL) + 'px';
+            el.style.height = (Number(item.height || 1) * CELL) + 'px';
             el.title = itemLabel(item) + '\n' + (item.description || '');
             el.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                 '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) : '') + '</div>';

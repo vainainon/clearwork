@@ -1,5 +1,5 @@
 local Config = CWInventoryConfig or {}
-local InventoryServerVersion = 'v26-ground-pile-loot-order-delete-log'
+local InventoryServerVersion = 'v28-single-main-paperdoll'
 
 print(('[cw-inventory] loaded %s'):format(InventoryServerVersion))
 
@@ -10,8 +10,7 @@ Config.Debug = Config.Debug == true
 
 if type(Config.BaseContainers) ~= 'table' then
     Config.BaseContainers = {
-        pockets = { label = 'Карманы', width = 4, height = 2, order = 10 },
-        belt = { label = 'Пояс', width = 3, height = 1, order = 20 }
+        main = { label = 'Инвентарь', width = 8, height = 5, order = 10 }
     }
 end
 
@@ -35,6 +34,13 @@ end
 if type(Config.DefaultStarterItems) ~= 'table' then
     Config.DefaultStarterItems = {}
 end
+
+if type(Config.BaseContainers) == 'table' and Config.BaseContainers.main == nil then
+    Config.BaseContainers = {
+        main = { label = 'Инвентарь', width = 8, height = 5, order = 10 }
+    }
+end
+
 
 local Locks = {}
 
@@ -551,19 +557,17 @@ local function buildEquipment(items)
     return equipment
 end
 
+
 local function containerDisplayOrder(containerId, defaultOrder)
     local explicit = {
-        coat = 10,
-        pockets = 20,
-        pants = 30,
-        vest = 40,
-        belt = 50
+        main = 10
     }
     if explicit[tostring(containerId or '')] then
         return explicit[tostring(containerId or '')]
     end
     return tonumber(defaultOrder) or 999
 end
+
 
 local function buildContainers(items)
     local containers = {}
@@ -579,21 +583,6 @@ local function buildContainers(items)
     end
 
     local equipment = buildEquipment(items)
-    for _, item in pairs(equipment) do
-        local def = Items.Get(item.item_name)
-        if def and def.container and def.container.id then
-            local c = def.container
-            containers[c.id] = {
-                id = c.id,
-                label = c.label or c.id,
-                width = tonumber(c.width) or 1,
-                height = tonumber(c.height) or 1,
-                order = containerDisplayOrder(c.id, c.order),
-                source = item.equip_slot,
-                source_item = item.id
-            }
-        end
-    end
 
     local out = {}
     for _, c in pairs(containers) do out[#out + 1] = c end
@@ -726,9 +715,48 @@ local function updateSourceStackAfterTake(characterId, sourceItem, takeAmount)
     return true, 'decremented'
 end
 
+
+local function migrateDetachedItemsToMain(characterId)
+    characterId = tonumber(characterId)
+    if not characterId then return end
+
+    local items = getItems(characterId)
+    local containersList, containersMap = buildContainers(items)
+    local mainContainerId = (containersList[1] and containersList[1].id) or 'main'
+    if not mainContainerId or not containersMap[mainContainerId] then
+        return
+    end
+
+    local changed = false
+    for _, item in ipairs(items or {}) do
+        if not item.equip_slot then
+            local containerId = tostring(item.container_id or '')
+            if containerId == '' or not containersMap[containerId] then
+                local targetContainerId, x, y, rotated = firstFreePlace(characterId, item.item_name)
+                if targetContainerId then
+                    MySQL.update.await('UPDATE cw_inventory_items SET container_id = ?, x = ?, y = ?, rotated = ? WHERE id = ? AND character_id = ?', {
+                        targetContainerId, x, y, rotated and 1 or 0, item.id, characterId
+                    })
+                    changed = true
+                else
+                    MySQL.update.await('UPDATE cw_inventory_items SET container_id = ?, x = 0, y = 0, rotated = 0 WHERE id = ? AND character_id = ?', {
+                        mainContainerId, item.id, characterId
+                    })
+                    changed = true
+                end
+            end
+        end
+    end
+
+    if changed then
+        bumpRevision(characterId)
+    end
+end
+
 local function getState(characterId, src)
     characterId = tonumber(characterId)
     ensureState(characterId)
+    migrateDetachedItemsToMain(characterId)
     local items = getItems(characterId)
     local containers, _, equipment = buildContainers(items)
     local equipmentSlots = getEquipmentSlots()
