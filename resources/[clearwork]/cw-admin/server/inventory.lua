@@ -1,11 +1,113 @@
+local InventoryDebug = true
 local OpenedCharacterInventories = {}
+local unpackArgs = table.unpack or unpack
+
+local function safeJson(value)
+    local ok, encoded = pcall(json.encode, value or {})
+    if not ok then
+        return '<json encode failed>'
+    end
+    encoded = tostring(encoded or '{}')
+    if #encoded > 1600 then
+        encoded = encoded:sub(1, 1600) .. '...<cut>'
+    end
+    return encoded
+end
+
+local function dbg(message, ...)
+    if not InventoryDebug then return end
+    local args = { ... }
+    local ok, text = pcall(function()
+        return ('[cw-admin:inventory:debug] ' .. tostring(message)):format(unpackArgs(args))
+    end)
+    print(ok and text or ('[cw-admin:inventory:debug] ' .. tostring(message)))
+end
+
+local function errlog(message, ...)
+    local args = { ... }
+    local ok, text = pcall(function()
+        return ('[cw-admin:inventory:error] ' .. tostring(message)):format(unpackArgs(args))
+    end)
+    print(ok and text or ('[cw-admin:inventory:error] ' .. tostring(message)))
+end
+
+local function countMap(value)
+    if type(value) ~= 'table' then return 0 end
+    local count = 0
+    for _ in pairs(value) do count = count + 1 end
+    return count
+end
+
+local function summarizeState(state)
+    state = type(state) == 'table' and state or {}
+    return ('character_id=%s revision=%s containers=%s equipmentSlots=%s equipment=%s items=%s definitions=%s')
+        :format(
+            tostring(state.character_id or state.characterId),
+            tostring(state.revision),
+            tostring(type(state.containers) == 'table' and #state.containers or 0),
+            tostring(type(state.equipmentSlots) == 'table' and #state.equipmentSlots or 0),
+            tostring(countMap(state.equipment)),
+            tostring(type(state.items) == 'table' and #state.items or 0),
+            tostring(countMap(state.definitions))
+        )
+end
+
+local function summarizeDefinitions(definitions)
+    return tostring(countMap(definitions))
+end
+
+local function firstTable(...)
+    for i = 1, select('#', ...) do
+        local value = select(i, ...)
+        if type(value) == 'table' then
+            return value
+        end
+    end
+    return nil
+end
+
+local function firstNonNil(...)
+    for i = 1, select('#', ...) do
+        local value = select(i, ...)
+        if value ~= nil then
+            return value
+        end
+    end
+    return nil
+end
+
+local function normalizeAddItemArguments(first, itemNameArg, amountArg, metadataArg, targetArg, reasonArg, rawArg)
+    -- Старый формат: TriggerServerEvent(..., dataTable)
+    if type(first) == 'table' and itemNameArg == nil then
+        return first
+    end
+
+    -- Новый v12 формат: TriggerServerEvent(..., characterId, itemName, amount, metadata, target, reason, rawTable)
+    local data = type(rawArg) == 'table' and rawArg or {}
+    data.characterId = firstNonNil(data.characterId, data.character_id, first)
+    data.character_id = data.characterId
+    data.itemName = firstNonNil(data.itemName, data.item_name, data.name, itemNameArg)
+    data.amount = firstNonNil(data.amount, amountArg, 1)
+    data.metadata = firstNonNil(data.metadata, metadataArg, '{}')
+    data.target = type(data.target) == 'table' and data.target or (type(targetArg) == 'table' and targetArg or nil)
+    data.reason = firstNonNil(data.reason, reasonArg, 'cw-admin inventory panel drag/drop')
+
+    if type(data.target) == 'table' and data.characterId then
+        data.target.characterId = firstNonNil(data.target.characterId, data.target.character_id, data.characterId)
+        data.target.character_id = data.target.characterId
+    end
+
+    return data
+end
 
 local function canUseCharacterInventory(src)
     if src == 0 then
+        dbg('permission src=console allowed=true')
         return true
     end
 
     if CWAdmin.IsOwner and CWAdmin.IsOwner(src) then
+        dbg('permission src=%s role=owner allowed=true', tostring(src))
         return true
     end
 
@@ -14,11 +116,41 @@ local function canUseCharacterInventory(src)
         role = CWAdmin.GetAdminRole(src) or 'user'
     end
 
-    return role == 'general' or role == 'admin'
+    local allowed = role == 'general' or role == 'admin'
+    dbg('permission src=%s role=%s allowed=%s', tostring(src), tostring(role), tostring(allowed))
+    return allowed
 end
 
 local function sendInventoryError(src, message)
-    CWAdmin.SendError(src, message or 'Ошибка инвентаря.')
+    message = tostring(message or 'Ошибка инвентаря.')
+    errlog('send error src=%s message=%s', tostring(src), message)
+
+    if CWAdmin.SendError then
+        CWAdmin.SendError(src, message)
+        return
+    end
+
+    TriggerClientEvent('chat:addMessage', src, {
+        color = { 190, 40, 40 },
+        multiline = true,
+        args = { 'cw-admin', message }
+    })
+end
+
+local function sendInventorySuccess(src, message)
+    message = tostring(message or 'Готово.')
+    dbg('send success src=%s message=%s', tostring(src), message)
+
+    if CWAdmin.SendSuccess then
+        CWAdmin.SendSuccess(src, message)
+        return
+    end
+
+    TriggerClientEvent('chat:addMessage', src, {
+        color = { 40, 190, 80 },
+        multiline = true,
+        args = { 'cw-admin', message }
+    })
 end
 
 local function getActorAccountId(src)
@@ -28,9 +160,7 @@ end
 
 local function getCharacterInfo(characterId)
     characterId = tonumber(characterId)
-    if not characterId then
-        return nil
-    end
+    if not characterId then return nil end
 
     return MySQL.single.await([[
         SELECT id, account_id, firstname, lastname, slot
@@ -40,29 +170,33 @@ local function getCharacterInfo(characterId)
     ]], { characterId })
 end
 
-local unpackArgs = table.unpack or unpack
-
 local function callInventoryExport(name, ...)
     local args = { ... }
+    dbg('calling cw-inventory export=%s args=%s', tostring(name), safeJson(args))
+
     local ok, a, b, c = pcall(function()
         return exports['cw-inventory'][name](unpackArgs(args))
     end)
 
     if not ok then
+        errlog('export failed name=%s error=%s', tostring(name), tostring(a))
         return false, tostring(a or 'cw-inventory export failed')
+    end
+
+    if name == 'GetInventoryState' then
+        dbg('export result %s ok=true stateSummary=%s rawType=%s', tostring(name), summarizeState(a), type(a))
+    elseif name == 'GetItemDefinitions' then
+        dbg('export result %s ok=true definitions=%s', tostring(name), summarizeDefinitions(a))
+    else
+        dbg('export result %s ok=true a=%s b=%s c=%s', tostring(name), tostring(a), tostring(b), tostring(c))
     end
 
     return true, a, b, c
 end
 
 local function decodeMetadata(raw)
-    if raw == nil or raw == '' then
-        return {}
-    end
-
-    if type(raw) == 'table' then
-        return raw
-    end
+    if raw == nil or raw == '' then return {} end
+    if type(raw) == 'table' then return raw end
 
     raw = tostring(raw or '')
     local ok, data = pcall(json.decode, raw)
@@ -80,11 +214,9 @@ end
 
 local function normalizeItemName(raw)
     local value = trim(raw)
-    if value == '' then
-        return ''
-    end
+    if value == '' then return '' end
 
-    -- Защита от старого UI/кэша, если вместо value прилетает строка вида "Бинт — bandage".
+    -- Защита от старого UI/кэша: "Бинт — bandage" -> "bandage".
     local afterDash = value:match('[—%-]%s*([%w_%-]+)%s*$')
     if afterDash and afterDash ~= '' then
         value = afterDash
@@ -112,24 +244,23 @@ local function resolveCharacterId(src, data)
     for _, candidate in ipairs(candidates) do
         local value = tonumber(candidate)
         if value and value > 0 then
+            dbg('resolved characterId=%s from payload for src=%s', tostring(value), tostring(src))
             return value
         end
     end
 
-    -- Главный фикс: если NUI/drag-and-drop не прислал characterId,
-    -- берём персонажа из последнего открытого окна инвентаря этого админа.
     local opened = tonumber(OpenedCharacterInventories[src])
     if opened and opened > 0 then
+        dbg('resolved characterId=%s from opened window fallback for src=%s', tostring(opened), tostring(src))
         return opened
     end
 
+    errlog('failed to resolve characterId src=%s data=%s opened=%s', tostring(src), safeJson(data), tostring(OpenedCharacterInventories[src]))
     return nil
 end
 
 local function normalizeTarget(target)
-    if type(target) ~= 'table' then
-        return nil
-    end
+    if type(target) ~= 'table' then return nil end
 
     local result = {
         type = tostring(target.type or ''),
@@ -138,18 +269,17 @@ local function normalizeTarget(target)
         rotated = target.rotated == true or target.rotated == 1 or target.rotated == '1',
     }
 
-    if target.x ~= nil then
-        result.x = tonumber(target.x)
-    end
-
-    if target.y ~= nil then
-        result.y = tonumber(target.y)
-    end
+    if target.x ~= nil then result.x = tonumber(target.x) end
+    if target.y ~= nil then result.y = tonumber(target.y) end
 
     if result.type == '' and result.slot ~= '' then
         result.type = 'slot'
     elseif result.type == '' and result.containerId ~= '' then
         result.type = 'container'
+    end
+
+    if result.type == '' then
+        return nil
     end
 
     return result
@@ -161,28 +291,60 @@ local function loadInventoryPayload(characterId)
         return nil, 'Некорректный ID персонажа.'
     end
 
-    local okState, stateOrErr = callInventoryExport('GetInventoryState', characterId)
+    dbg('load payload start characterId=%s', tostring(characterId))
+
+    local okState, stateA, stateB, stateC = callInventoryExport('GetInventoryState', characterId)
     if not okState then
-        return nil, stateOrErr
+        return nil, stateA
     end
 
-    local okLogs, logsOrErr = callInventoryExport('GetInventoryLogs', characterId, 80)
+    local okLogs, logsA, logsB, logsC = callInventoryExport('GetInventoryLogs', characterId, 80)
     if not okLogs then
-        return nil, logsOrErr
+        return nil, logsA
     end
 
-    local okDefs, definitionsOrErr = callInventoryExport('GetItemDefinitions')
+    local okDefs, defsA, defsB, defsC = callInventoryExport('GetItemDefinitions')
     if not okDefs then
-        return nil, definitionsOrErr
+        return nil, defsA
     end
+
+    local character = getCharacterInfo(characterId)
+
+    -- v12: поддерживаем оба варианта export API:
+    --   return state
+    --   return true, state
+    -- чтобы cw-admin не показывал пустой state, если API позже будет обёрнут в ok/result.
+    local state = firstTable(stateA, stateB, stateC) or {}
+    local logs = firstTable(logsA, logsB, logsC) or {}
+    local definitions = firstTable(defsA, defsB, defsC) or {}
+
+    if not state.character_id and not state.characterId then
+        state.character_id = characterId
+        state.characterId = characterId
+    end
+
+    dbg(
+        'load payload done characterId=%s state={%s} logs=%s definitions=%s characterFound=%s',
+        tostring(characterId),
+        summarizeState(state),
+        tostring(#logs),
+        summarizeDefinitions(definitions),
+        tostring(character ~= nil)
+    )
 
     return {
         characterId = characterId,
         character_id = characterId,
-        character = getCharacterInfo(characterId),
-        state = stateOrErr or {},
-        logs = logsOrErr or {},
-        definitions = definitionsOrErr or {},
+        character = character,
+        state = state,
+        logs = logs,
+        definitions = definitions,
+        debug = {
+            from = 'cw-admin/server/inventory.lua',
+            stateSummary = summarizeState(state),
+            logs = #logs,
+            definitions = countMap(definitions),
+        }
     }, nil
 end
 
@@ -193,6 +355,8 @@ local function sendInventoryPayload(src, characterId)
         return false
     end
 
+    dbg('send payload start src=%s characterId=%s', tostring(src), tostring(characterId))
+
     local payload, err = loadInventoryPayload(characterId)
     if not payload then
         sendInventoryError(src, 'Не удалось загрузить инвентарь: ' .. tostring(err))
@@ -200,12 +364,14 @@ local function sendInventoryPayload(src, characterId)
     end
 
     OpenedCharacterInventories[src] = characterId
+    dbg('send payload to client src=%s characterId=%s %s', tostring(src), tostring(characterId), tostring(payload.debug and payload.debug.stateSummary or ''))
     TriggerClientEvent('cw-admin:client:inventory:receive', src, payload)
     return true
 end
 
 RegisterNetEvent('cw-admin:server:inventory:open', function(characterId)
     local src = source
+    dbg('event open src=%s rawCharacterId=%s openedFallback=%s', tostring(src), tostring(characterId), tostring(OpenedCharacterInventories[src]))
 
     if not canUseCharacterInventory(src) then
         sendInventoryError(src, 'Нет доступа к инвентарю персонажей.')
@@ -219,6 +385,7 @@ RegisterNetEvent('cw-admin:server:inventory:open', function(characterId)
     end
 
     local character = getCharacterInfo(characterId)
+    dbg('open character lookup characterId=%s found=%s data=%s', tostring(characterId), tostring(character ~= nil), safeJson(character))
     if not character then
         sendInventoryError(src, 'Персонаж не найден.')
         return
@@ -227,15 +394,21 @@ RegisterNetEvent('cw-admin:server:inventory:open', function(characterId)
     sendInventoryPayload(src, characterId)
 end)
 
-RegisterNetEvent('cw-admin:server:inventory:addItem', function(data)
+RegisterNetEvent('cw-admin:server:inventory:addItem', function(first, itemNameArg, amountArg, metadataArg, targetArg, reasonArg, rawArg)
     local src = source
+    local data = normalizeAddItemArguments(first, itemNameArg, amountArg, metadataArg, targetArg, reasonArg, rawArg)
+    dbg(
+        'event addItem v12 src=%s firstType=%s raw=%s openedFallback=%s',
+        tostring(src),
+        type(first),
+        safeJson(data),
+        tostring(OpenedCharacterInventories[src])
+    )
 
     if not canUseCharacterInventory(src) then
         sendInventoryError(src, 'Нет доступа к выдаче предметов.')
         return
     end
-
-    data = type(data) == 'table' and data or {}
 
     local characterId = resolveCharacterId(src, data)
     local itemName = normalizeItemName(data.itemName or data.item_name or data.name)
@@ -244,7 +417,19 @@ RegisterNetEvent('cw-admin:server:inventory:addItem', function(data)
     local metadata = decodeMetadata(data.metadata)
     local target = normalizeTarget(data.target)
 
+    dbg(
+        'addItem normalized src=%s characterId=%s item=%s amount=%s target=%s metadataValid=%s reason=%s',
+        tostring(src),
+        tostring(characterId),
+        tostring(itemName),
+        tostring(amount),
+        safeJson(target),
+        tostring(metadata ~= nil),
+        tostring(reason)
+    )
+
     if not characterId then
+        errlog('addItem abort missing characterId src=%s normalizedData=%s openedFallback=%s', tostring(src), safeJson(data), tostring(OpenedCharacterInventories[src]))
         sendInventoryError(src, 'Некорректный ID персонажа.')
         return
     end
@@ -265,13 +450,13 @@ RegisterNetEvent('cw-admin:server:inventory:addItem', function(data)
     end
 
     local character = getCharacterInfo(characterId)
+    dbg('addItem character lookup characterId=%s found=%s', tostring(characterId), tostring(character ~= nil))
     if not character then
         sendInventoryError(src, 'Персонаж не найден.')
         return
     end
 
     local ok, result, err
-
     if target then
         ok, result, err = callInventoryExport(
             'AddItemToCharacterAt',
@@ -297,6 +482,8 @@ RegisterNetEvent('cw-admin:server:inventory:addItem', function(data)
         )
     end
 
+    dbg('addItem export finished ok=%s result=%s err=%s', tostring(ok), tostring(result), tostring(err))
+
     if not ok then
         sendInventoryError(src, 'Ошибка экспорта инвентаря: ' .. tostring(result))
         return
@@ -309,18 +496,21 @@ RegisterNetEvent('cw-admin:server:inventory:addItem', function(data)
 
     OpenedCharacterInventories[src] = characterId
 
-    CWAdmin.AdminLog(src, 'inventory_add_item', {
-        character_id = characterId,
-        item_name = itemName,
-        amount = amount,
-        target = target,
-        reason = reason,
-    })
+    if CWAdmin.AdminLog then
+        CWAdmin.AdminLog(src, 'inventory_add_item', {
+            character_id = characterId,
+            item_name = itemName,
+            amount = amount,
+            target = target,
+            reason = reason,
+        })
+    end
 
-    CWAdmin.SendSuccess(src, ('Выдано: %s x%s.'):format(itemName, amount))
+    sendInventorySuccess(src, ('Выдано: %s x%s.'):format(itemName, amount))
     sendInventoryPayload(src, characterId)
 end)
 
 AddEventHandler('playerDropped', function()
+    dbg('playerDropped src=%s clear openedCharacter=%s', tostring(source), tostring(OpenedCharacterInventories[source]))
     OpenedCharacterInventories[source] = nil
 end)

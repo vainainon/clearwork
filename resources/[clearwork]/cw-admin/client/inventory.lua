@@ -1,18 +1,132 @@
+local InventoryClientDebug = true
+local unpackArgs = table.unpack or unpack
+
+local function jsonDump(value)
+    local ok, encoded = pcall(json.encode, value or {})
+    if not ok then
+        return '<json encode failed>'
+    end
+    encoded = tostring(encoded or '{}')
+    if #encoded > 1200 then
+        encoded = encoded:sub(1, 1200) .. '...<cut>'
+    end
+    return encoded
+end
+
+local function dbg(message, ...)
+    if not InventoryClientDebug then return end
+    local args = { ... }
+    local ok, text = pcall(function()
+        return ('[cw-admin:inventory:client:debug] ' .. tostring(message)):format(unpackArgs(args))
+    end)
+    print(ok and text or ('[cw-admin:inventory:client:debug] ' .. tostring(message)))
+end
+
+local function resolveCharacterId(data)
+    data = type(data) == 'table' and data or {}
+
+    local candidates = {
+        data.characterId,
+        data.character_id,
+        data.id,
+        data.character,
+    }
+
+    if type(data.target) == 'table' then
+        candidates[#candidates + 1] = data.target.characterId
+        candidates[#candidates + 1] = data.target.character_id
+    end
+
+    for _, candidate in ipairs(candidates) do
+        local value = tonumber(candidate)
+        if value and value > 0 then
+            return value
+        end
+    end
+
+    return nil
+end
+
 RegisterNUICallback('characterInventoryOpen', function(data, cb)
-    TriggerServerEvent('cw-admin:server:inventory:open', tonumber(data and (data.characterId or data.character_id or data.id)))
+    local characterId = resolveCharacterId(data)
+    dbg('NUI open data=%s resolvedCharacterId=%s', jsonDump(data), tostring(characterId))
+    TriggerServerEvent('cw-admin:server:inventory:open', characterId)
     cb({ ok = true })
 end)
 
 RegisterNUICallback('characterInventoryAddItem', function(data, cb)
-    TriggerServerEvent('cw-admin:server:inventory:addItem', data or {})
+    data = type(data) == 'table' and data or {}
+    local characterId = resolveCharacterId(data)
+
+    -- v12: отправляем characterId отдельным первым аргументом, а не только внутри JSON-таблицы.
+    -- На RedM/NUI это надёжнее для drag-and-drop, плюс сервер всё равно поддерживает старый table-only формат.
+    local target = type(data.target) == 'table' and data.target or {}
+    if characterId then
+        data.characterId = characterId
+        data.character_id = characterId
+        target.characterId = characterId
+        target.character_id = characterId
+    end
+
+    local itemName = data.itemName or data.item_name or data.name
+    local amount = data.amount or 1
+    local metadata = data.metadata or '{}'
+    local reason = data.reason or 'cw-admin inventory panel drag/drop'
+
+    dbg(
+        'NUI addItem v12 data=%s resolvedCharacterId=%s item=%s amount=%s target=%s',
+        jsonDump(data),
+        tostring(characterId),
+        tostring(itemName),
+        tostring(amount),
+        jsonDump(target)
+    )
+
+    TriggerServerEvent(
+        'cw-admin:server:inventory:addItem',
+        characterId,
+        itemName,
+        amount,
+        metadata,
+        target,
+        reason,
+        data
+    )
+
     cb({ ok = true })
 end)
 
 RegisterNUICallback('characterInventoryRefresh', function(data, cb)
-    TriggerServerEvent('cw-admin:server:inventory:open', tonumber(data and (data.characterId or data.character_id or data.id)))
+    local characterId = resolveCharacterId(data)
+    dbg('NUI refresh data=%s resolvedCharacterId=%s', jsonDump(data), tostring(characterId))
+    TriggerServerEvent('cw-admin:server:inventory:open', characterId)
     cb({ ok = true })
 end)
 
 RegisterNetEvent('cw-admin:client:inventory:receive', function(payload)
-    SendNUIMessage({ action = 'inventory:receive', payload = payload or {} })
+    payload = type(payload) == 'table' and payload or {}
+    local state = type(payload.state) == 'table' and payload.state or {}
+    local definitions = type(payload.definitions) == 'table' and payload.definitions or (type(state.definitions) == 'table' and state.definitions or {})
+
+    local containerCount = type(state.containers) == 'table' and #state.containers or 0
+    local slotCount = type(state.equipmentSlots) == 'table' and #state.equipmentSlots or 0
+    local itemCount = type(state.items) == 'table' and #state.items or 0
+    local definitionCount = 0
+    for _ in pairs(definitions) do definitionCount = definitionCount + 1 end
+
+    dbg(
+        'receive payload characterId=%s stateCharacterId=%s revision=%s containers=%s slots=%s items=%s definitions=%s',
+        tostring(payload.characterId or payload.character_id),
+        tostring(state.character_id or state.characterId),
+        tostring(state.revision),
+        tostring(containerCount),
+        tostring(slotCount),
+        tostring(itemCount),
+        tostring(definitionCount)
+    )
+
+    SendNUIMessage({
+        action = 'inventory:receive',
+        payload = payload or {}
+    })
 end)

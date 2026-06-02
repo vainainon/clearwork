@@ -1,14 +1,26 @@
 CWInventoryConfig = CWInventoryConfig or {}
 
+-- Обычная игровая команда. Админские команды в проекте начинаются с cw,
+-- но инвентарь игрока должен быть без cw-префикса.
 CWInventoryConfig.OpenCommand = 'inventory'
-CWInventoryConfig.Debug = false
 
--- Размер клетки NUI. Серверу нужен только для передачи состояния, клиент рисует через CSS/JS.
-CWInventoryConfig.GridCell = 48
+-- ВРЕМЕННО НА ВРЕМЯ РАЗРАБОТКИ.
+-- После фикса drag-and-drop и payload можно вернуть false.
+CWInventoryConfig.Debug = true
 
 CWInventoryConfig.BaseContainers = {
-    pockets = { label = 'Карманы', width = 4, height = 2, order = 10 },
-    belt = { label = 'Пояс', width = 3, height = 1, order = 20 }
+    pockets = {
+        label = 'Карманы',
+        width = 4,
+        height = 2,
+        order = 10
+    },
+    belt = {
+        label = 'Пояс',
+        width = 3,
+        height = 1,
+        order = 20
+    }
 }
 
 CWInventoryConfig.EquipmentSlots = {
@@ -26,8 +38,4 @@ CWInventoryConfig.EquipmentSlots = {
     { id = 'accessory_2', label = 'Украшение 2', accepts = { accessory = true }, order = 110 }
 }
 
--- Стартовый набор применяется только при первом создании cw_inventory_state персонажа.
-CWInventoryConfig.DefaultStarterItems = {
-    { name = 'bread', amount = 2 },
-    { name = 'water', amount = 1 }
-}
+CWInventoryConfig.DefaultStarterItems = CWInventoryConfig.DefaultStarterItems or {}
