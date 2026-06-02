@@ -1,6 +1,9 @@
 local InventoryDebug = true
+local InventoryIntegrationVersion = 'v15-export-self-call-fix'
 local OpenedCharacterInventories = {}
 local unpackArgs = table.unpack or unpack
+
+print(('[cw-admin:inventory] loaded %s'):format(InventoryIntegrationVersion))
 
 local function safeJson(value)
     local ok, encoded = pcall(json.encode, value or {})
@@ -82,7 +85,7 @@ local function normalizeAddItemArguments(first, itemNameArg, amountArg, metadata
         return first
     end
 
-    -- Новый v12 формат: TriggerServerEvent(..., characterId, itemName, amount, metadata, target, reason, rawTable)
+    -- Новый формат: TriggerServerEvent(..., characterId, itemName, amount, metadata, target, reason, rawTable)
     local data = type(rawArg) == 'table' and rawArg or {}
     data.characterId = firstNonNil(data.characterId, data.character_id, first)
     data.character_id = data.characterId
@@ -175,7 +178,11 @@ local function callInventoryExport(name, ...)
     dbg('calling cw-inventory export=%s args=%s', tostring(name), safeJson(args))
 
     local ok, a, b, c = pcall(function()
-        return exports['cw-inventory'][name](unpackArgs(args))
+        -- В Cfx Lua export proxy рассчитан на вызов через ':' и получает self первым аргументом.
+        -- При динамическом вызове через [name](...) нужно передать proxy вручную, иначе первый
+        -- реальный аргумент съедается как self: characterId=36 превращается в nil/смещается.
+        local invExports = exports['cw-inventory']
+        return invExports[name](invExports, unpackArgs(args))
     end)
 
     if not ok then
@@ -394,13 +401,12 @@ RegisterNetEvent('cw-admin:server:inventory:open', function(characterId)
     sendInventoryPayload(src, characterId)
 end)
 
-RegisterNetEvent('cw-admin:server:inventory:addItem', function(first, itemNameArg, amountArg, metadataArg, targetArg, reasonArg, rawArg)
-    local src = source
-    local data = normalizeAddItemArguments(first, itemNameArg, amountArg, metadataArg, targetArg, reasonArg, rawArg)
+local function handleAddItemEvent(src, data, origin)
+    data = type(data) == 'table' and data or {}
     dbg(
-        'event addItem v12 src=%s firstType=%s raw=%s openedFallback=%s',
+        'event addItem %s src=%s raw=%s openedFallback=%s',
+        tostring(origin or 'unknown'),
         tostring(src),
-        type(first),
         safeJson(data),
         tostring(OpenedCharacterInventories[src])
     )
@@ -508,6 +514,23 @@ RegisterNetEvent('cw-admin:server:inventory:addItem', function(first, itemNameAr
 
     sendInventorySuccess(src, ('Выдано: %s x%s.'):format(itemName, amount))
     sendInventoryPayload(src, characterId)
+end
+
+-- v14: основной путь из NUI. Клиент передаёт одну нормализованную таблицу,
+-- чтобы не ловить рассыпание аргументов между NUI -> client -> server.
+RegisterNetEvent('cw-admin:server:inventory:addItemV14', function(data)
+    handleAddItemEvent(source, data, 'v14_table')
+end)
+
+-- Совместимость со старыми клиентами/кэшем: поддерживаем старый event и оба формата аргументов.
+RegisterNetEvent('cw-admin:server:inventory:addItem', function(first, itemNameArg, amountArg, metadataArg, targetArg, reasonArg, rawArg)
+    local data = normalizeAddItemArguments(first, itemNameArg, amountArg, metadataArg, targetArg, reasonArg, rawArg)
+    handleAddItemEvent(source, data, 'legacy_compat')
+end)
+
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+    print(('[cw-admin:inventory] started %s'):format(InventoryIntegrationVersion))
 end)
 
 AddEventHandler('playerDropped', function()

@@ -1,5 +1,8 @@
 local InventoryClientDebug = true
+local InventoryClientVersion = 'v14-character-table-event'
 local unpackArgs = table.unpack or unpack
+
+print(('[cw-admin:inventory:client] loaded %s'):format(InventoryClientVersion))
 
 local function jsonDump(value)
     local ok, encoded = pcall(json.encode, value or {})
@@ -54,13 +57,11 @@ RegisterNUICallback('characterInventoryOpen', function(data, cb)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('characterInventoryAddItem', function(data, cb)
+local function normalizeAddItemPayload(data)
     data = type(data) == 'table' and data or {}
     local characterId = resolveCharacterId(data)
-
-    -- v12: отправляем characterId отдельным первым аргументом, а не только внутри JSON-таблицы.
-    -- На RedM/NUI это надёжнее для drag-and-drop, плюс сервер всё равно поддерживает старый table-only формат.
     local target = type(data.target) == 'table' and data.target or {}
+
     if characterId then
         data.characterId = characterId
         data.character_id = characterId
@@ -68,32 +69,41 @@ RegisterNUICallback('characterInventoryAddItem', function(data, cb)
         target.character_id = characterId
     end
 
-    local itemName = data.itemName or data.item_name or data.name
-    local amount = data.amount or 1
-    local metadata = data.metadata or '{}'
-    local reason = data.reason or 'cw-admin inventory panel drag/drop'
+    data.target = target
+    data.itemName = data.itemName or data.item_name or data.name
+    data.amount = data.amount or 1
+    data.metadata = data.metadata or '{}'
+    data.reason = data.reason or 'cw-admin inventory panel drag/drop'
 
+    return data, characterId
+end
+
+local function handleAddItemNui(data, cb, origin)
+    local payload, characterId = normalizeAddItemPayload(data)
     dbg(
-        'NUI addItem v12 data=%s resolvedCharacterId=%s item=%s amount=%s target=%s',
-        jsonDump(data),
+        'NUI addItem %s payload=%s resolvedCharacterId=%s item=%s amount=%s target=%s',
+        tostring(origin or 'unknown'),
+        jsonDump(payload),
         tostring(characterId),
-        tostring(itemName),
-        tostring(amount),
-        jsonDump(target)
+        tostring(payload.itemName),
+        tostring(payload.amount),
+        jsonDump(payload.target)
     )
 
-    TriggerServerEvent(
-        'cw-admin:server:inventory:addItem',
-        characterId,
-        itemName,
-        amount,
-        metadata,
-        target,
-        reason,
-        data
-    )
+    -- v14: передаём на сервер одну таблицу. Так проще отследить и меньше шанс,
+    -- что RedM/NUI потеряет часть аргументов при drag/drop.
+    TriggerServerEvent('cw-admin:server:inventory:addItemV14', payload)
 
     cb({ ok = true })
+end
+
+RegisterNUICallback('characterInventoryAddItemV14', function(data, cb)
+    handleAddItemNui(data, cb, 'v14')
+end)
+
+-- Совместимость со старым JS-кэшем.
+RegisterNUICallback('characterInventoryAddItem', function(data, cb)
+    handleAddItemNui(data, cb, 'legacy_callback')
 end)
 
 RegisterNUICallback('characterInventoryRefresh', function(data, cb)

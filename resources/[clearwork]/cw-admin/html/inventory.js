@@ -2,6 +2,7 @@
     'use strict';
 
     var DEBUG = true;
+    var INVENTORY_JS_VERSION = 'v14-character-table-event';
     var CELL = 34;
 
     var lastCharacters = [];
@@ -67,7 +68,7 @@
     }
 
     function post(name, data) {
-        debug('post', name, data || {});
+        debug('post', name, data || {}, 'jsVersion', INVENTORY_JS_VERSION);
         return fetch('https://' + GetParentResourceName() + '/' + name, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json; charset=UTF-8' },
@@ -331,7 +332,7 @@
         };
 
         debug('add item payload', payload);
-        post('characterInventoryAddItem', payload);
+        post('characterInventoryAddItemV14', payload);
     }
 
     function parseDragData(event) {

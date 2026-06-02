@@ -1,4 +1,7 @@
 local Config = CWInventoryConfig or {}
+local InventoryServerVersion = 'v16-cw-items-export-self-fix'
+
+print(('[cw-inventory] loaded %s'):format(InventoryServerVersion))
 
 -- Защитный fallback: инвентарь должен иметь базовые контейнеры/слоты даже если
 -- RedM не подхватил server/config.lua после копирования файлов без refresh.
@@ -41,7 +44,17 @@ local Items = {}
 
 local function safeItemExport(exportName, a, b, c)
     local ok, result = pcall(function()
-        return exports['cw-items'][exportName](a, b, c)
+        -- В Cfx Lua export proxy рассчитан на вызов через ':' и получает self первым аргументом.
+        -- При динамическом вызове через [exportName](...) нужно передать proxy вручную,
+        -- иначе первый реальный аргумент съедается как self.
+        -- Без этого GetClientDefinitions() работал, а GetItem('bread') приходил в cw-items как nil.
+        local itemExports = exports['cw-items']
+        local fn = itemExports and itemExports[exportName]
+        if type(fn) ~= 'function' then
+            return nil
+        end
+
+        return fn(itemExports, a, b, c)
     end)
 
     if not ok then
@@ -80,7 +93,7 @@ end
 
 local function dbg(message, ...)
     if not Config.Debug then return end
-    print(('[cw-inventory] ' .. tostring(message)):format(...))
+    print(('[cw-inventory:debug] ' .. tostring(message)):format(...))
 end
 
 local function enc(value)
@@ -184,6 +197,13 @@ local function getCharacter(src)
     local characterId = tonumber(player.character.id)
     if not characterId then return nil, nil, 'Сначала выбери персонажа.' end
     return player, characterId, nil
+end
+
+local function characterExists(characterId)
+    characterId = tonumber(characterId)
+    if not characterId then return false end
+    local id = MySQL.scalar.await('SELECT id FROM characters WHERE id = ? LIMIT 1', { characterId })
+    return tonumber(id) ~= nil
 end
 
 local function withLock(characterId, cb)
@@ -438,18 +458,25 @@ local function metadataEquals(a, b)
 end
 
 local function getState(characterId)
+    characterId = tonumber(characterId)
     ensureState(characterId)
     local items = getItems(characterId)
     local containers, _, equipment = buildContainers(items)
-    return {
+    local equipmentSlots = getEquipmentSlots()
+    local definitions = Items.GetClientDefinitions()
+    local state = {
         character_id = characterId,
+        characterId = characterId,
         revision = getRevision(characterId),
         containers = containers,
-        equipmentSlots = getEquipmentSlots(),
+        equipmentSlots = equipmentSlots,
         equipment = equipment,
         items = items,
-        definitions = Items.GetClientDefinitions()
+        definitions = definitions
     }
+    dbg('getState characterId=%s revision=%s containers=%s equipmentSlots=%s items=%s definitions=%s',
+        tostring(characterId), tostring(state.revision), tostring(#containers), tostring(#equipmentSlots), tostring(#items), tostring((function(t) local c=0 for _ in pairs(t or {}) do c=c+1 end return c end)(definitions)))
+    return state
 end
 
 local function sendState(src, openAfter)
@@ -610,8 +637,10 @@ local function addItemToCharacter(characterId, itemName, amount, metadata, actor
     amount = math.max(1, tonumber(amount) or 1)
     metadata = metadata or {}
     local def = Items.Get(itemName)
-    if not def then return false, 'Такого предмета нет в cw-items.' end
+    if not def then return false, ('Такого предмета нет в cw-items: %s.'):format(itemName) end
+    if not characterExists(characterId) then return false, 'Персонаж не найден.' end
 
+    dbg('AddItemToCharacter characterId=%s item=%s amount=%s', tostring(characterId), tostring(itemName), tostring(amount))
     ensureState(characterId)
     return withLock(characterId, function()
         local remaining = amount
@@ -680,8 +709,10 @@ local function addItemToCharacterAt(characterId, itemName, amount, metadata, tar
     if amount < 1 then amount = 1 end
 
     local def = Items.Get(itemName)
-    if not def then return false, 'Такого предмета нет в cw-items.' end
+    if not def then return false, ('Такого предмета нет в cw-items: %s.'):format(itemName) end
+    if not characterExists(characterId) then return false, 'Персонаж не найден.' end
 
+    dbg('AddItemToCharacterAt characterId=%s item=%s amount=%s rawTarget=%s', tostring(characterId), tostring(itemName), tostring(amount), enc(target))
     ensureState(characterId)
 
     local targetType = tostring(target.type or '')
@@ -742,8 +773,12 @@ local function addItemToCharacterAt(characterId, itemName, amount, metadata, tar
         end
 
         local tempItem = { item_name = itemName }
+        dbg('AddItemToCharacterAt container target characterId=%s item=%s container=%s x=%s y=%s rotated=%s', tostring(characterId), tostring(itemName), tostring(containerId), tostring(x), tostring(y), tostring(rotated))
         local ok, msg = canPlace(characterId, tempItem, containerId, x, y, rotated, -1)
-        if not ok then return false, msg end
+        if not ok then
+            dbg('AddItemToCharacterAt canPlace failed characterId=%s item=%s reason=%s', tostring(characterId), tostring(itemName), tostring(msg))
+            return false, msg
+        end
 
         local insertId = MySQL.insert.await([[INSERT INTO cw_inventory_items
             (character_id, item_name, amount, metadata, container_id, x, y, rotated, equip_slot)
@@ -815,7 +850,11 @@ end)
 
 exports('GetInventoryState', function(characterId)
     characterId = tonumber(characterId)
-    if not characterId then return nil end
+    if not characterId then
+        dbg('GetInventoryState invalid characterId=%s', tostring(characterId))
+        return nil
+    end
+    dbg('GetInventoryState export characterId=%s', tostring(characterId))
     return getState(characterId)
 end)
 
@@ -846,6 +885,7 @@ end)
 
 AddEventHandler('onResourceStart', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
+    print(('[cw-inventory] started %s'):format(InventoryServerVersion))
     CreateThread(function()
         Wait(500)
         ensureSchema()
