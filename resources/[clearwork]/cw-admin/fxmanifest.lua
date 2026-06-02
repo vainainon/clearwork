@@ -12,7 +12,8 @@ files {
     'html/index.html',
     'html/style.css',
     'html/app.js',
-    'html/inventory.js'
+    'html/inventory.js',
+	'html/medical.js'
 }
 
 server_scripts {
@@ -25,13 +26,16 @@ server_scripts {
     'server/tools.lua',
     'server/management.lua',
     'server/inventory.lua',
+	'server/medical.lua',
     'server/main.lua'
+	
 }
 
 client_scripts {
     'client/tools.lua',
     'client/main.lua',
-    'client/inventory.lua'
+    'client/inventory.lua',
+	'client/medical.lua',
 }
 
 dependency 'oxmysql'

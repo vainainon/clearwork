@@ -389,7 +389,19 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(characterId)
     end
 
     if character.delete_requested_at then
-        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Персонаж поставлен на удаление.')
+        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Персонаж ожидает удаления.')
+        SendCharacters(src, player)
+        return
+    end
+
+    if tonumber(character.is_dead) == 1 then
+        TriggerClientEvent(
+            'cw-characters:client:selectFailed',
+            src,
+            'Персонаж мёртв.'
+        )
+
+        SendCharacters(src, player)
         return
     end
 

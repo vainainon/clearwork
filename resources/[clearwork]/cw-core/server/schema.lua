@@ -79,5 +79,24 @@ MySQL.query.await([[
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ]])
 
+MySQL.query.await([[
+    ALTER TABLE characters
+    ADD COLUMN IF NOT EXISTS is_dead TINYINT(1) NOT NULL DEFAULT 0;
+]])
+
+MySQL.query.await([[
+    CREATE TABLE IF NOT EXISTS cw_settings (
+        `key` VARCHAR(64) NOT NULL,
+        `value` LONGTEXT NULL,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+]])
+
+MySQL.query.await([[
+    INSERT IGNORE INTO cw_settings (`key`, `value`)
+    VALUES ('permadeath_chance', '15');
+]])
+
 print('[cw-core] Database schema ready.')
 end)
