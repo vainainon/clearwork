@@ -10,6 +10,20 @@ local function ClampChance(value)
     return value
 end
 
+local function EnsureColumn(tableName, columnName, definition)
+    local exists = MySQL.scalar.await([[
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+    ]], { tableName, columnName })
+
+    if tonumber(exists) == 0 then
+        MySQL.query.await(('ALTER TABLE `%s` ADD COLUMN %s'):format(tableName, definition))
+    end
+end
+
 local function EnsureSchema()
     MySQL.query.await([[
         CREATE TABLE IF NOT EXISTS cw_settings (
@@ -25,8 +39,8 @@ local function EnsureSchema()
         VALUES ('permadeath_chance', '15');
     ]])
 
-    MySQL.query.await([[ALTER TABLE characters ADD COLUMN IF NOT EXISTS is_dead TINYINT(1) NOT NULL DEFAULT 0;]])
-    MySQL.query.await([[ALTER TABLE characters ADD COLUMN IF NOT EXISTS revived_at DATETIME NULL;]])
+    EnsureColumn('characters', 'is_dead', '`is_dead` TINYINT(1) NOT NULL DEFAULT 0')
+    EnsureColumn('characters', 'revived_at', '`revived_at` DATETIME NULL')
 end
 
 local function GetPermadeathChance()
@@ -54,7 +68,6 @@ local function CanManagePermadeath(src)
     if src == 0 then return true end
 
     local role = CWAdmin.GetAdminRole(src)
-
     return role == 'owner' or role == 'general' or role == 'admin'
 end
 
@@ -69,6 +82,17 @@ local function GetServerCoords(src)
         y = coords.y,
         z = coords.z,
         heading = GetEntityHeading(ped)
+    }
+end
+
+local function GetCharacterCoords(character)
+    if type(character) ~= 'table' then return nil end
+
+    return {
+        x = tonumber(character.pos_x) or 0.0,
+        y = tonumber(character.pos_y) or 0.0,
+        z = tonumber(character.pos_z) or 0.0,
+        heading = tonumber(character.heading) or 0.0
     }
 end
 
@@ -93,6 +117,24 @@ local function FindOnlineSourceByCharacterId(characterId)
     end
 
     return nil, nil
+end
+
+local function IsCharacterPermadead(characterId)
+    characterId = tonumber(characterId)
+    if not characterId then return false end
+
+    local value = MySQL.scalar.await(
+        'SELECT is_dead FROM characters WHERE id = ? LIMIT 1',
+        { characterId }
+    )
+
+    return tonumber(value) == 1
+end
+
+local function RefreshAdminData(src)
+    TriggerClientEvent('cw-admin:client:medical:settings', src, {
+        permadeathChance = GetPermadeathChance()
+    })
 end
 
 CreateThread(function()
@@ -146,29 +188,19 @@ RegisterNetEvent('cw-admin:server:medical:revivePlayer', function(target)
     end
 
     local player = CWAdmin.GetCWPlayer(target)
-
     if not player or not player.character then
         CWAdmin.SendError(src, 'У игрока не выбран персонаж.')
         return
     end
 
     local characterId = tonumber(player.character.id)
-
     if not characterId then
         CWAdmin.SendError(src, 'У игрока некорректный персонаж.')
         return
     end
 
-    local row = MySQL.single.await(
-        'SELECT id, is_dead FROM characters WHERE id = ? LIMIT 1',
-        { characterId }
-    )
-
-    local deadInMemory = tonumber(player.character.is_dead) == 1
-    local deadInDb = row and tonumber(row.is_dead) == 1
-
-    if deadInMemory or deadInDb then
-        CWAdmin.SendError(src, 'У персонажа перма-килл. Сначала сними пермакилл во вкладке Персонажи.')
+    if tonumber(player.character.is_dead) == 1 or IsCharacterPermadead(characterId) then
+        CWAdmin.SendError(src, 'У персонажа перма-килл. Сначала сними пермакилл во вкладке Персонажи кнопкой "Снять пермакилл / оживить".')
         return
     end
 
@@ -199,6 +231,18 @@ RegisterNetEvent('cw-admin:server:medical:reviveCharacter', function(characterId
         return
     end
 
+    local character = MySQL.single.await([[
+        SELECT id, firstname, lastname, pos_x, pos_y, pos_z, heading, is_dead
+        FROM characters
+        WHERE id = ?
+        LIMIT 1
+    ]], { characterId })
+
+    if not character then
+        CWAdmin.SendError(src, 'Персонаж не найден.')
+        return
+    end
+
     local affected = MySQL.update.await([[
         UPDATE characters
         SET is_dead = 0,
@@ -212,12 +256,20 @@ RegisterNetEvent('cw-admin:server:medical:reviveCharacter', function(characterId
     end
 
     local onlineSrc, onlinePlayer = FindOnlineSourceByCharacterId(characterId)
-
     if onlineSrc and onlinePlayer and onlinePlayer.character then
         onlinePlayer.character.is_dead = 0
         onlinePlayer.character.revived_at = os.date('%Y-%m-%d %H:%M:%S')
+
+        local coords = GetServerCoords(onlineSrc) or GetCharacterCoords(character)
+        TriggerClientEvent('cw-death:client:adminRevive', onlineSrc, coords)
+        SaveCharacterPosition(onlineSrc, coords)
     end
 
-    CWAdmin.AdminLog(src, 'revive_character', { character = characterId })
-    CWAdmin.SendSuccess(src, 'Пермакилл снят. Теперь игрок сможет выбрать персонажа через /chars и возродиться.')
+    CWAdmin.AdminLog(src, 'revive_character', {
+        character = characterId,
+        was_dead = tonumber(character.is_dead) == 1
+    })
+
+    CWAdmin.SendSuccess(src, 'Пермакилл снят. Если игрок онлайн, он возрождён на этом же персонаже.')
+    RefreshAdminData(src)
 end)

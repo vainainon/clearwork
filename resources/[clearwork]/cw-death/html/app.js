@@ -16,216 +16,217 @@ let lastRotation = 0;
 let currentMode = 'hidden';
 
 function safeSet(el, value) {
-    if (el) el.textContent = value;
-}
-
-function show() {
-    if (root) root.classList.remove('hidden');
-}
-
-function hide() {
-    if (root) {
-        root.classList.add('hidden');
-        root.classList.remove('countdown-state', 'dead-state', 'safe-state');
-    }
-
-    currentMode = 'hidden';
-    clearSpinTimers();
+  if (el) el.textContent = value;
 }
 
 function clearSpinTimers() {
-    if (fakeRollInterval) {
-        clearInterval(fakeRollInterval);
-        fakeRollInterval = null;
-    }
+  if (fakeRollInterval) {
+    clearInterval(fakeRollInterval);
+    fakeRollInterval = null;
+  }
 
-    if (finishTimeout) {
-        clearTimeout(finishTimeout);
-        finishTimeout = null;
-    }
+  if (finishTimeout) {
+    clearTimeout(finishTimeout);
+    finishTimeout = null;
+  }
+}
+
+function show() {
+  if (root) root.classList.remove('hidden');
+}
+
+function hide() {
+  if (root) {
+    root.classList.add('hidden');
+    root.classList.remove('countdown-state', 'dead-state', 'safe-state');
+  }
+
+  currentMode = 'hidden';
+  clearSpinTimers();
 }
 
 function formatTime(seconds) {
-    seconds = Math.max(0, Number(seconds) || 0);
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
+  seconds = Math.max(0, Number(seconds) || 0);
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 function clampChance(value) {
-    value = Number(value);
-    if (!Number.isFinite(value)) return null;
-    value = Math.floor(value);
-    if (value < 0) value = 0;
-    if (value > 100) value = 100;
-    return value;
+  value = Number(value);
+  if (!Number.isFinite(value)) return null;
+  value = Math.floor(value);
+  if (value < 0) value = 0;
+  if (value > 100) value = 100;
+  return value;
 }
 
 function setChance(chance) {
-    chance = clampChance(chance);
+  chance = clampChance(chance);
 
-    if (chance === null) {
-        safeSet(chanceValue, '—');
-        if (wheel) wheel.style.setProperty('--death-angle', '0deg');
-        return;
-    }
+  if (chance === null) {
+    safeSet(chanceValue, '—');
+    if (wheel) wheel.style.setProperty('--death-angle', '0deg');
+    safeSet(footerLeft, 'Красная зона зависит от шанса смерти.');
+    return;
+  }
 
-    safeSet(chanceValue, `${chance}%`);
+  safeSet(chanceValue, `${chance}%`);
 
-    const angle = chance >= 100 ? 360 : chance * 3.6;
-    if (wheel) wheel.style.setProperty('--death-angle', `${angle}deg`);
+  const angle = chance >= 100 ? 360 : chance * 3.6;
+  if (wheel) wheel.style.setProperty('--death-angle', `${angle}deg`);
 
+  if (chance >= 100) {
+    safeSet(footerLeft, 'Красная зона: 1–100. Зелёной зоны нет.');
+  } else if (chance <= 0) {
+    safeSet(footerLeft, 'Красной зоны нет. Зелёная зона: 1–100.');
+  } else {
     safeSet(footerLeft, `Красная зона: 1–${chance}. Зелёная зона: ${chance + 1}–100.`);
+  }
 }
 
 function setMode(mode) {
-    currentMode = mode;
+  currentMode = mode;
+  if (!root) return;
 
-    if (!root) return;
-
-    root.classList.remove('countdown-state', 'dead-state', 'safe-state');
-
-    if (mode === 'countdown') root.classList.add('countdown-state');
-    if (mode === 'dead') root.classList.add('dead-state');
-    if (mode === 'safe') root.classList.add('safe-state');
+  root.classList.remove('countdown-state', 'dead-state', 'safe-state');
+  if (mode === 'countdown') root.classList.add('countdown-state');
+  if (mode === 'dead') root.classList.add('dead-state');
+  if (mode === 'safe') root.classList.add('safe-state');
 }
 
 function prepareRoulette(data) {
-    clearSpinTimers();
-    show();
-    setMode('countdown');
+  clearSpinTimers();
+  show();
+  setMode('countdown');
 
-    if (wheel) wheel.classList.remove('spinning');
+  if (wheel) wheel.classList.remove('spinning');
 
-    safeSet(rollValue, '—');
-    safeSet(title, 'Колесо судьбы');
-    safeSet(subtitle, 'Салунная рулетка решит, останется ли персонаж в живых.');
+  safeSet(rollValue, '—');
+  safeSet(title, 'Колесо судьбы');
+  safeSet(subtitle, 'Салунная рулетка решит, останется ли персонаж в живых.');
 
-    setChance(data.chance);
+  setChance(data.chance);
 
-    const countdown = Number(data.countdown || 5);
-
-    safeSet(countdownValue, countdown);
-    safeSet(timer, `До вращения колеса: ${countdown}`);
-    safeSet(text, data.alreadyDead
-        ? 'Этот персонаж уже отмечен смертью. Колесо подтвердит приговор.'
-        : 'Персонаж ранен. До вращения колеса осталось несколько секунд.'
-    );
-    safeSet(footerRight, 'Бросок 1–100');
+  const countdown = Number(data.countdown || 5);
+  safeSet(countdownValue, countdown);
+  safeSet(timer, `До вращения колеса: ${countdown}`);
+  safeSet(text, data.alreadyDead
+    ? 'Этот персонаж уже отмечен смертью. Колесо подтвердит приговор.'
+    : 'Персонаж ранен. До вращения колеса осталось несколько секунд.'
+  );
+  safeSet(footerRight, 'Бросок 1–100');
 }
 
 function updateCountdown(data) {
-    if (currentMode !== 'countdown') return;
+  if (currentMode !== 'countdown') return;
 
-    const seconds = Math.max(0, Number(data.seconds) || 0);
+  const seconds = Math.max(0, Number(data.seconds) || 0);
+  if (data.chance !== undefined && data.chance !== null) setChance(data.chance);
 
-    if (data.chance !== undefined && data.chance !== null) setChance(data.chance);
+  safeSet(countdownValue, seconds);
+  safeSet(timer, seconds > 0 ? `До вращения колеса: ${seconds}` : 'Колесо пошло...');
 
-    safeSet(countdownValue, seconds);
-    safeSet(timer, seconds > 0 ? `До вращения колеса: ${seconds}` : 'Колесо пошло...');
-
-    if (seconds <= 0) {
-        safeSet(title, 'Ставки сделаны');
-        safeSet(text, 'Колесо судьбы начинает вращение.');
-    }
+  if (seconds <= 0) {
+    safeSet(title, 'Ставки сделаны');
+    safeSet(text, 'Колесо судьбы начинает вращение.');
+  }
 }
 
 function startSpin(data) {
-    clearSpinTimers();
-    show();
-    setMode('spin');
+  clearSpinTimers();
+  show();
+  setMode('spin');
+  setChance(data.chance);
 
-    setChance(data.chance);
+  if (wheel) wheel.classList.add('spinning');
 
-    if (wheel) wheel.classList.add('spinning');
+  safeSet(title, 'Ставки сделаны');
+  safeSet(subtitle, 'Колесо крутится. Красная зона означает перманентную смерть.');
+  safeSet(text, 'Барабан пошёл. Сейчас выпадет число, которое решит судьбу персонажа.');
+  safeSet(timer, 'Колесо вращается...');
+  safeSet(countdownValue, '0');
+  safeSet(footerRight, 'Колесо в движении');
 
-    safeSet(title, 'Ставки сделаны');
-    safeSet(subtitle, 'Колесо крутится. Красная зона означает перманентную смерть.');
-    safeSet(text, 'Барабан пошёл. Сейчас выпадет число, которое решит судьбу персонажа.');
-    safeSet(timer, 'Колесо вращается...');
-    safeSet(countdownValue, '0');
-    safeSet(footerRight, 'Колесо в движении');
-
-    fakeRollInterval = setInterval(() => {
-        const value = Math.floor(Math.random() * 100) + 1;
-        safeSet(rollValue, String(value).padStart(2, '0'));
-    }, 70);
+  fakeRollInterval = setInterval(() => {
+    const value = Math.floor(Math.random() * 100) + 1;
+    safeSet(rollValue, String(value).padStart(2, '0'));
+  }, 70);
 }
 
 function finishRoll(roll, chance, permanent, seconds) {
-    clearSpinTimers();
+  clearSpinTimers();
 
-    if (wheel) wheel.classList.remove('spinning');
+  if (wheel) wheel.classList.remove('spinning');
 
-    safeSet(rollValue, String(roll).padStart(2, '0'));
+  safeSet(rollValue, String(roll).padStart(2, '0'));
 
-    if (permanent) {
-        setMode('dead');
-        safeSet(title, 'Перманентная смерть');
-        safeSet(subtitle, 'Колесо остановилось в красной зоне.');
-        safeSet(text, `Выпал бросок ${roll}. Текущий шанс смерти был ${chance}%. Персонаж погиб навсегда.`);
-        safeSet(timer, 'Оживление возможно только через вкладку Персонажи в админ-меню.');
-        safeSet(footerRight, 'Приговор исполнен');
-    } else {
-        setMode('safe');
-        safeSet(title, 'Персонаж выжил');
-        safeSet(subtitle, 'Колесо миновало красную зону.');
-        safeSet(text, `Выпал бросок ${roll}. Текущий шанс смерти был ${chance}%. Персонаж остаётся в нокдауне.`);
-        safeSet(timer, `До подъёма: ${formatTime(seconds || 300)}`);
-        safeSet(footerRight, 'Выжил');
-    }
+  if (permanent) {
+    setMode('dead');
+    safeSet(title, 'Перманентная смерть');
+    safeSet(subtitle, 'Колесо остановилось в красной зоне.');
+    safeSet(text, `Выпал бросок ${roll}. Текущий шанс смерти был ${chance}%. Персонаж погиб навсегда.`);
+    safeSet(timer, 'Оживление возможно только через вкладку Персонажи в админ-меню.');
+    safeSet(footerRight, 'Приговор исполнен');
+  } else {
+    setMode('safe');
+    safeSet(title, 'Персонаж выжил');
+    safeSet(subtitle, 'Колесо миновало красную зону.');
+    safeSet(text, `Выпал бросок ${roll}. Текущий шанс смерти был ${chance}%. Персонаж остаётся в нокдауне.`);
+    safeSet(timer, `До подъёма: ${formatTime(seconds || 300)}`);
+    safeSet(footerRight, 'Выжил');
+  }
 }
 
 function animateToRoll(data) {
-    show();
+  show();
 
-    const roll = Math.max(1, Math.min(100, Math.floor(Number(data.roll) || 1)));
-    const chance = clampChance(data.chance) ?? 0;
-    const permanent = data.permanent === true;
+  const roll = Math.max(1, Math.min(100, Math.floor(Number(data.roll) || 1)));
+  const chance = clampChance(data.chance) ?? 0;
+  const permanent = data.permanent === true;
 
-    setChance(chance);
+  setChance(chance);
 
-    if (currentMode !== 'spin') startSpin({ chance });
+  if (currentMode !== 'spin') startSpin({ chance });
 
-    if (!wheel) {
-        finishRoll(roll, chance, permanent, data.seconds || 300);
-        return;
-    }
+  if (!wheel) {
+    finishRoll(roll, chance, permanent, data.seconds || 300);
+    return;
+  }
 
-    const selectedAngle = (roll - 0.5) * 3.6;
-    const targetRotation = (360 * 7) - selectedAngle;
+  const selectedAngle = (roll - 0.5) * 3.6;
+  const targetRotation = (360 * 7) - selectedAngle;
 
-    wheel.style.transition = 'none';
-    wheel.style.transform = `rotate(${lastRotation % 360}deg)`;
-    wheel.offsetHeight;
-    wheel.style.transition = 'transform 5.7s cubic-bezier(0.12, 0.72, 0.08, 1)';
-    wheel.style.transform = `rotate(${targetRotation}deg)`;
+  wheel.style.transition = 'none';
+  wheel.style.transform = `rotate(${lastRotation % 360}deg)`;
+  wheel.offsetHeight;
+  wheel.style.transition = 'transform 5.7s cubic-bezier(0.12, 0.72, 0.08, 1)';
+  wheel.style.transform = `rotate(${targetRotation}deg)`;
+  lastRotation = targetRotation;
 
-    lastRotation = targetRotation;
-
-    finishTimeout = setTimeout(() => {
-        finishRoll(roll, chance, permanent, data.seconds || 300);
-    }, 5850);
+  finishTimeout = setTimeout(() => {
+    finishRoll(roll, chance, permanent, data.seconds || 300);
+  }, 5850);
 }
 
 function updateDownedTimer(data) {
-    if (currentMode === 'countdown' || currentMode === 'spin') return;
+  if (currentMode === 'countdown' || currentMode === 'spin') return;
 
-    if (data.permanent) {
-        safeSet(timer, 'Персонаж мёртв навсегда.');
-        return;
-    }
+  if (data.permanent) {
+    safeSet(timer, 'Персонаж мёртв навсегда.');
+    return;
+  }
 
-    safeSet(timer, `До подъёма: ${formatTime(data.seconds || 0)}`);
+  safeSet(timer, `До подъёма: ${formatTime(data.seconds || 0)}`);
 }
 
 window.addEventListener('message', (event) => {
-    const data = event.data || {};
+  const data = event.data || {};
 
-    if (data.action === 'roulette:prepare') prepareRoulette(data);
-    if (data.action === 'roulette:countdownTick') updateCountdown(data);
-    if (data.action === 'roulette:spin') startSpin(data);
-    if (data.action === 'roulette:result') animateToRoll(data);
-    if (data.action === 'downed:tick') updateDownedTimer(data);
-    if (data.action === 'downed:hide') hide();
+  if (data.action === 'roulette:prepare') prepareRoulette(data);
+  if (data.action === 'roulette:countdownTick') updateCountdown(data);
+  if (data.action === 'roulette:spin') startSpin(data);
+  if (data.action === 'roulette:result') animateToRoll(data);
+  if (data.action === 'downed:tick') updateDownedTimer(data);
+  if (data.action === 'downed:hide') hide();
 });

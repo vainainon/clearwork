@@ -1,5 +1,25 @@
 local Config = CWCharactersConfig
 
+local function IsDeathLocked(src)
+    if GetResourceState('cw-death') ~= 'started' then
+        return false
+    end
+
+    local ok, locked = pcall(function()
+        return exports['cw-death']:IsPlayerDeathLocked(src)
+    end)
+
+    return ok and locked == true
+end
+
+local function SendOpenBlocked(src)
+    TriggerClientEvent(
+        'cw-characters:client:openFailed',
+        src,
+        'Смена персонажа недоступна: текущий персонаж ранен или убит.'
+    )
+end
+
 RegisterNetEvent('cw-characters:server:getCharacters', function()
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
@@ -21,6 +41,11 @@ RegisterNetEvent('cw-characters:server:openCharacterMenu', function(coords)
         return
     end
 
+    if player.character and IsDeathLocked(src) then
+        SendOpenBlocked(src)
+        return
+    end
+
     if player.character and type(coords) == 'table' then
         exports['cw-core']:SaveCharacterPosition(src, coords)
     end
@@ -32,9 +57,7 @@ RegisterNetEvent('cw-characters:server:createCharacter', function(data)
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
 
-    if not player or type(data) ~= 'table' then
-        return
-    end
+    if not player or type(data) ~= 'table' then return end
 
     local characters = CWCharacters.GetCharacters(player.account_id)
     if #characters >= (tonumber(Config.MaxCharacters) or 3) then
@@ -84,13 +107,22 @@ RegisterNetEvent('cw-characters:server:createCharacter', function(data)
     end)
 
     if not ok then
-        print(('[cw-characters] Create character failed for account %s: %s'):format(tostring(player.account_id), tostring(characterId)))
+        print(('[cw-characters] Create character failed for account %s: %s'):format(
+            tostring(player.account_id),
+            tostring(characterId)
+        ))
+
         TriggerClientEvent('cw-characters:client:createFailed', src, 'Не удалось создать персонажа. Попробуй ещё раз.')
         CWCharacters.SendCharacters(src, player)
         return
     end
 
-    print(('[cw-characters] Created character %s for account %s in slot %s'):format(tostring(characterId), tostring(player.account_id), tostring(slot)))
+    print(('[cw-characters] Created character %s for account %s in slot %s'):format(
+        tostring(characterId),
+        tostring(player.account_id),
+        tostring(slot)
+    ))
+
     TriggerClientEvent('cw-characters:client:createSuccess', src)
     CWCharacters.SendCharacters(src, player)
 end)
@@ -99,24 +131,14 @@ RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(charact
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
 
-    if not player then
-        return
-    end
+    if not player then return end
 
     characterId = tonumber(characterId)
-    if not characterId then
-        return
-    end
+    if not characterId then return end
 
     local character = MySQL.single.await([[
-        SELECT
-            id,
-            firstname,
-            lastname,
-            created_at,
-            delete_requested_at,
-            is_dead,
-            TIMESTAMPDIFF(DAY, created_at, NOW()) AS age_days
+        SELECT id, firstname, lastname, created_at, delete_requested_at, is_dead,
+               TIMESTAMPDIFF(DAY, created_at, NOW()) AS age_days
         FROM characters
         WHERE id = ? AND account_id = ?
         LIMIT 1
@@ -148,14 +170,21 @@ RegisterNetEvent('cw-characters:server:requestDeleteCharacter', function(charact
         return
     end
 
-    MySQL.update.await('UPDATE characters SET delete_requested_at = NOW() WHERE id = ? AND account_id = ?', { characterId, player.account_id })
+    MySQL.update.await(
+        'UPDATE characters SET delete_requested_at = NOW() WHERE id = ? AND account_id = ?',
+        { characterId, player.account_id }
+    )
 
     if isCurrent and isDead then
         exports['cw-core']:ClearCharacter(src)
         player.character = nil
     end
 
-    print(('[cw-characters] Delete requested for character %s by account %s'):format(tostring(characterId), tostring(player.account_id)))
+    print(('[cw-characters] Delete requested for character %s by account %s'):format(
+        tostring(characterId),
+        tostring(player.account_id)
+    ))
+
     CWCharacters.SendCharacters(src, player)
 end)
 
@@ -163,20 +192,14 @@ RegisterNetEvent('cw-characters:server:cancelDeleteCharacter', function(characte
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
 
-    if not player then
-        return
-    end
+    if not player then return end
 
     characterId = tonumber(characterId)
-    if not characterId then
-        return
-    end
+    if not characterId then return end
 
     local character = MySQL.single.await([[
-        SELECT
-            id,
-            delete_requested_at,
-            TIMESTAMPDIFF(MINUTE, delete_requested_at, NOW()) AS delete_minutes_passed
+        SELECT id, delete_requested_at,
+               TIMESTAMPDIFF(MINUTE, delete_requested_at, NOW()) AS delete_minutes_passed
         FROM characters
         WHERE id = ? AND account_id = ?
         LIMIT 1
@@ -192,8 +215,16 @@ RegisterNetEvent('cw-characters:server:cancelDeleteCharacter', function(characte
         return
     end
 
-    MySQL.update.await('UPDATE characters SET delete_requested_at = NULL WHERE id = ? AND account_id = ?', { characterId, player.account_id })
-    print(('[cw-characters] Delete cancelled for character %s by account %s'):format(tostring(characterId), tostring(player.account_id)))
+    MySQL.update.await(
+        'UPDATE characters SET delete_requested_at = NULL WHERE id = ? AND account_id = ?',
+        { characterId, player.account_id }
+    )
+
+    print(('[cw-characters] Delete cancelled for character %s by account %s'):format(
+        tostring(characterId),
+        tostring(player.account_id)
+    ))
+
     CWCharacters.SendCharacters(src, player)
 end)
 
@@ -201,9 +232,7 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(payload)
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
 
-    if not player then
-        return
-    end
+    if not player then return end
 
     local characterId = nil
     local currentPosition = nil
@@ -215,20 +244,18 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(payload)
         characterId = tonumber(payload)
     end
 
-    if not characterId then
-        return
-    end
+    if not characterId then return end
 
-    if player.character and tonumber(player.character.id) == characterId then
+    if player.character and IsDeathLocked(src) then
+        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Смена персонажа недоступна: текущий персонаж ранен или убит.')
         CWCharacters.SendCharacters(src, player)
         return
     end
 
-    if player.character and type(currentPosition) == 'table' then
-        exports['cw-core']:SaveCharacterPosition(src, currentPosition)
-    end
-
-    local character = MySQL.single.await('SELECT * FROM characters WHERE id = ? AND account_id = ? LIMIT 1', { characterId, player.account_id })
+    local character = MySQL.single.await(
+        'SELECT * FROM characters WHERE id = ? AND account_id = ? LIMIT 1',
+        { characterId, player.account_id }
+    )
 
     if not character then
         TriggerClientEvent('cw-characters:client:selectFailed', src, 'Персонаж не найден.')
@@ -247,8 +274,21 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(payload)
         return
     end
 
+    if player.character and tonumber(player.character.id) == characterId then
+        CWCharacters.SendCharacters(src, player)
+        return
+    end
+
+    if player.character and type(currentPosition) == 'table' then
+        exports['cw-core']:SaveCharacterPosition(src, currentPosition)
+    end
+
     if character.revived_at ~= nil then
-        MySQL.update.await('UPDATE characters SET revived_at = NULL WHERE id = ? AND account_id = ?', { characterId, player.account_id })
+        MySQL.update.await(
+            'UPDATE characters SET revived_at = NULL WHERE id = ? AND account_id = ?',
+            { characterId, player.account_id }
+        )
+
         character.revived_at = nil
         character.was_revived = false
     end
@@ -271,9 +311,7 @@ RegisterNetEvent('cw-characters:server:clearSelectedCharacter', function()
     local src = source
     local player = CWCharacters.GetCWPlayer(src)
 
-    if not player then
-        return
-    end
+    if not player then return end
 
     exports['cw-core']:ClearCharacter(src)
     print(('[cw-characters] Cleared selected character for %s'):format(tostring(player.name)))

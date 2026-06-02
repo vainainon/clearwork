@@ -1,4 +1,5 @@
 local Config = CWCharactersClientConfig
+
 local characters = {}
 local uiOpen = false
 local characterSelected = false
@@ -22,11 +23,21 @@ local function Notify(message)
     })
 end
 
+local function IsDeathSwitchBlocked()
+    if GetResourceState('cw-death') ~= 'started' then
+        return false
+    end
+
+    local ok, locked = pcall(function()
+        return exports['cw-death']:IsSwitchBlocked()
+    end)
+
+    return ok and locked == true
+end
+
 local function SetPedHiddenInCharacterMenu(state)
     local ped = PlayerPedId()
-    if not ped or ped == 0 then
-        return
-    end
+    if not ped or ped == 0 then return end
 
     FreezeEntityPosition(ped, state)
     SetEntityVisible(ped, not state, false)
@@ -61,11 +72,10 @@ local function GetCurrentCoords()
 end
 
 local function ApplyBasicAppearance(character)
-    if not character then
-        return
-    end
+    if not character then return end
 
     local skin = nil
+
     if character.skin then
         local ok, decoded = pcall(json.decode, character.skin)
         if ok and type(decoded) == 'table' then
@@ -89,6 +99,7 @@ end
 
 local function OpenUI()
     uiOpen = true
+
     SetNuiFocus(true, true)
     SetNuiFocusKeepInput(false)
 
@@ -107,6 +118,7 @@ end
 
 local function CloseUI(unhidePed)
     uiOpen = false
+
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
 
@@ -129,6 +141,11 @@ end
 local function OpenCharacterMenu()
     DisableSpawnManagerAutoSpawn()
 
+    if characterSelected and IsDeathSwitchBlocked() then
+        Notify('Смена персонажа недоступна: текущий персонаж ранен или убит.')
+        return
+    end
+
     local firstMenu = not characterSelected
     hidePedForCurrentMenu = firstMenu
 
@@ -139,8 +156,8 @@ local function OpenCharacterMenu()
         TriggerEvent('cw-spawn:client:prepareCharacterMenu', true)
         Wait(600)
         SetPedHiddenInCharacterMenu(true)
-        RequestCharacters(false)
 
+        RequestCharacters(false)
         Wait(250)
         DoScreenFadeIn(400)
         return
@@ -151,6 +168,7 @@ end
 
 CreateThread(function()
     DisableSpawnManagerAutoSpawn()
+
     Wait(tonumber(Config.AutoOpenDelay) or 5000)
 
     if not firstOpenDone then
@@ -199,14 +217,11 @@ RegisterNetEvent('cw-characters:client:receiveCharacters', function(data, server
     end
 
     characterSelected = currentCharacterId ~= nil
-
     OpenUI()
 end)
 
 RegisterNetEvent('cw-characters:client:characterSelected', function(character)
-    if not character then
-        return
-    end
+    if not character then return end
 
     characterSelected = true
     currentCharacterId = tonumber(character.id)
@@ -214,6 +229,10 @@ RegisterNetEvent('cw-characters:client:characterSelected', function(character)
     CloseUI(false)
     ApplyBasicAppearance(character)
     TriggerEvent('cw-spawn:client:spawnCharacter', character)
+end)
+
+RegisterNetEvent('cw-characters:client:openFailed', function(message)
+    Notify(message or 'Сейчас нельзя открыть меню персонажей.')
 end)
 
 RegisterNetEvent('cw-characters:client:selectFailed', function(message)
@@ -237,6 +256,12 @@ RegisterNetEvent('cw-characters:client:deleteFailed', function(message)
 end)
 
 RegisterNUICallback('selectCharacter', function(data, cb)
+    if IsDeathSwitchBlocked() then
+        Notify('Смена персонажа недоступна: текущий персонаж ранен или убит.')
+        cb({ ok = false })
+        return
+    end
+
     if data and data.id then
         TriggerServerEvent('cw-characters:server:selectCharacter', {
             id = tonumber(data.id),
@@ -282,6 +307,7 @@ end)
 RegisterCommand('fixfocus', function()
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
+
     TriggerEvent('chat:addMessage', {
         color = { 120, 255, 120 },
         args = { 'ClearWork', 'Фокус сброшен.' }
@@ -297,9 +323,7 @@ AddEventHandler('onClientResourceStart', function(resourceName)
 end)
 
 AddEventHandler('onResourceStop', function(resourceName)
-    if resourceName ~= GetCurrentResourceName() then
-        return
-    end
+    if resourceName ~= GetCurrentResourceName() then return end
 
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)

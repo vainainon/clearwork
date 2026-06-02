@@ -11,7 +11,6 @@ function CWAdmin.GetOnlinePlayers()
         if targetSrc then
             local cwPlayer = CWAdmin.GetCWPlayer(targetSrc)
             local roleData = CWAdmin.GetRoleData(targetSrc)
-
             local ped = GetPlayerPed(targetSrc)
 
             local coords = {
@@ -23,7 +22,6 @@ function CWAdmin.GetOnlinePlayers()
 
             if ped and ped ~= 0 then
                 local c = GetEntityCoords(ped)
-
                 coords.x = tonumber(c.x) or 0.0
                 coords.y = tonumber(c.y) or 0.0
                 coords.z = tonumber(c.z) or 0.0
@@ -31,28 +29,26 @@ function CWAdmin.GetOnlinePlayers()
             end
 
             local character = nil
-
             if cwPlayer and cwPlayer.character then
                 character = {
                     id = cwPlayer.character.id,
                     firstname = cwPlayer.character.firstname,
                     lastname = cwPlayer.character.lastname,
-                    slot = cwPlayer.character.slot
+                    slot = cwPlayer.character.slot,
+                    is_dead = tonumber(cwPlayer.character.is_dead) or 0,
+                    revived_at = cwPlayer.character.revived_at
                 }
             end
 
             players[#players + 1] = {
                 source = targetSrc,
                 name = GetPlayerName(targetSrc) or ('ID ' .. targetSrc),
-
                 account_name = cwPlayer and cwPlayer.name or nil,
                 account_id = cwPlayer and cwPlayer.account_id or nil,
-
                 role = roleData.role,
                 role_label = roleData.label,
                 role_level = roleData.level,
                 role_identifier = roleData.identifier,
-
                 character = character,
                 ping = GetPlayerPing(targetSrc) or 0,
                 frozen = CWAdmin.FrozenPlayers[targetSrc] == true,
@@ -74,10 +70,7 @@ end
 
 local function GetPlayerCoords(src)
     local ped = GetPlayerPed(src)
-
-    if not ped or ped == 0 then
-        return nil
-    end
+    if not ped or ped == 0 then return nil end
 
     local coords = GetEntityCoords(ped)
 
@@ -90,20 +83,13 @@ local function GetPlayerCoords(src)
 end
 
 local function IsTargetProtected(src, target)
-    if target == src then
-        return false
-    end
+    if target == src then return false end
 
     local actorRole = CWAdmin.GetAdminRole(src)
     local targetRole = CWAdmin.GetAdminRole(target)
 
-    if targetRole == 'owner' then
-        return true
-    end
-
-    if CWAdmin.GetRoleLevel(targetRole) >= CWAdmin.GetRoleLevel(actorRole) then
-        return true
-    end
+    if targetRole == 'owner' then return true end
+    if CWAdmin.GetRoleLevel(targetRole) >= CWAdmin.GetRoleLevel(actorRole) then return true end
 
     return false
 end
@@ -121,7 +107,6 @@ end)
 
 RegisterNetEvent('cw-admin:server:players:action', function(action, target, payload)
     local src = source
-
     action = tostring(action or '')
     target = tonumber(target)
     payload = payload or {}
@@ -143,18 +128,13 @@ RegisterNetEvent('cw-admin:server:players:action', function(action, target, payl
         end
 
         local coords = GetPlayerCoords(target)
-
         if not coords then
             CWAdmin.SendError(src, 'Не удалось получить координаты игрока.')
             return
         end
 
         TriggerClientEvent('cw-admin:client:teleportToCoords', src, coords)
-
-        CWAdmin.AdminLog(src, 'player_goto', {
-            target = target
-        })
-
+        CWAdmin.AdminLog(src, 'player_goto', { target = target })
         return
     end
 
@@ -165,18 +145,13 @@ RegisterNetEvent('cw-admin:server:players:action', function(action, target, payl
         end
 
         local coords = GetPlayerCoords(src)
-
         if not coords then
             CWAdmin.SendError(src, 'Не удалось получить твои координаты.')
             return
         end
 
         TriggerClientEvent('cw-admin:client:teleportToCoords', target, coords)
-
-        CWAdmin.AdminLog(src, 'player_bring', {
-            target = target
-        })
-
+        CWAdmin.AdminLog(src, 'player_bring', { target = target })
         return
     end
 
@@ -187,14 +162,8 @@ RegisterNetEvent('cw-admin:server:players:action', function(action, target, payl
         end
 
         CWAdmin.FrozenPlayers[target] = not CWAdmin.FrozenPlayers[target]
-
         TriggerClientEvent('cw-admin:client:setFrozen', target, CWAdmin.FrozenPlayers[target])
-
-        CWAdmin.AdminLog(src, 'player_freeze', {
-            target = target,
-            state = CWAdmin.FrozenPlayers[target]
-        })
-
+        CWAdmin.AdminLog(src, 'player_freeze', { target = target, state = CWAdmin.FrozenPlayers[target] })
         SendPlayers(src)
         return
     end
@@ -206,12 +175,7 @@ RegisterNetEvent('cw-admin:server:players:action', function(action, target, payl
         end
 
         local reason = tostring(payload.reason or 'Kicked by admin')
-
-        CWAdmin.AdminLog(src, 'player_kick', {
-            target = target,
-            reason = reason
-        })
-
+        CWAdmin.AdminLog(src, 'player_kick', { target = target, reason = reason })
         DropPlayer(target, reason)
         return
     end

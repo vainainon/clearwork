@@ -21,8 +21,22 @@ local function NormalizeCoords(coords)
         x = tonumber(coords.x) or 0.0,
         y = tonumber(coords.y) or 0.0,
         z = tonumber(coords.z) or 0.0,
-        heading = tonumber(coords.heading) or 0.0
+        heading = tonumber(coords.heading) or tonumber(coords.h) or 0.0
     }
+end
+
+local function EnsureColumn(tableName, columnName, definition)
+    local exists = MySQL.scalar.await([[
+        SELECT COUNT(*)
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+    ]], { tableName, columnName })
+
+    if tonumber(exists) == 0 then
+        MySQL.query.await(('ALTER TABLE `%s` ADD COLUMN %s'):format(tableName, definition))
+    end
 end
 
 local function EnsureSchema()
@@ -40,8 +54,8 @@ local function EnsureSchema()
         VALUES ('permadeath_chance', '15');
     ]])
 
-    MySQL.query.await([[ALTER TABLE characters ADD COLUMN IF NOT EXISTS is_dead TINYINT(1) NOT NULL DEFAULT 0;]])
-    MySQL.query.await([[ALTER TABLE characters ADD COLUMN IF NOT EXISTS revived_at DATETIME NULL;]])
+    EnsureColumn('characters', 'is_dead', '`is_dead` TINYINT(1) NOT NULL DEFAULT 0')
+    EnsureColumn('characters', 'revived_at', '`revived_at` DATETIME NULL')
 end
 
 local function GetPermadeathChance()
@@ -82,10 +96,50 @@ local function SaveCharacterPosition(src, coords)
     end)
 end
 
+local function IsCharacterPermadead(characterId)
+    characterId = tonumber(characterId)
+    if not characterId then return false end
+
+    local value = MySQL.scalar.await(
+        'SELECT is_dead FROM characters WHERE id = ? LIMIT 1',
+        { characterId }
+    )
+
+    return tonumber(value) == 1
+end
+
+local function IsPlayerDeathLocked(src)
+    src = tonumber(src)
+    if not src then return false end
+
+    if activeKnockdowns[src] ~= nil then
+        return true
+    end
+
+    local player = GetCWPlayer(src)
+    if not player or not player.character then
+        return false
+    end
+
+    if tonumber(player.character.is_dead) == 1 then
+        return true
+    end
+
+    local characterId = tonumber(player.character.id)
+    if not characterId then
+        return false
+    end
+
+    return IsCharacterPermadead(characterId)
+end
+
 local function SetCharacterPermadead(src, characterId, coords)
     coords = NormalizeCoords(coords)
+    characterId = tonumber(characterId)
 
-    MySQL.update.await([[
+    if not characterId then return false end
+
+    local affected = MySQL.update.await([[
         UPDATE characters
         SET is_dead = 1,
             revived_at = NULL,
@@ -94,17 +148,10 @@ local function SetCharacterPermadead(src, characterId, coords)
             pos_z = ?,
             heading = ?
         WHERE id = ?
-    ]], {
-        coords.x,
-        coords.y,
-        coords.z,
-        coords.heading,
-        tonumber(characterId)
-    })
+    ]], { coords.x, coords.y, coords.z, coords.heading, characterId })
 
     local player = GetCWPlayer(src)
-
-    if player and player.character then
+    if player and player.character and tonumber(player.character.id) == characterId then
         player.character.is_dead = 1
         player.character.revived_at = nil
         player.character.pos_x = coords.x
@@ -112,6 +159,8 @@ local function SetCharacterPermadead(src, characterId, coords)
         player.character.pos_z = coords.z
         player.character.heading = coords.heading
     end
+
+    return affected and affected > 0
 end
 
 CreateThread(function()
@@ -134,14 +183,13 @@ RegisterNetEvent('cw-death:server:knockdown', function(coords)
     SaveCharacterPosition(src, coords)
 
     local characterId = tonumber(player.character.id)
-
     if not characterId then
         activeKnockdowns[src] = nil
         TriggerClientEvent('cw-death:client:cancelKnockdown', src)
         return
     end
 
-    local alreadyDead = tonumber(player.character.is_dead) == 1
+    local alreadyDead = tonumber(player.character.is_dead) == 1 or IsCharacterPermadead(characterId)
     local chance = alreadyDead and 100 or GetPermadeathChance()
 
     activeKnockdowns[src] = {
@@ -164,10 +212,11 @@ RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
     local src = source
     local state = activeKnockdowns[src]
 
-    if not state or state.rolled then return end
+    if not state or state.rolled then
+        return
+    end
 
     local player = GetCWPlayer(src)
-
     if not player or not player.character then
         activeKnockdowns[src] = nil
         TriggerClientEvent('cw-death:client:cancelKnockdown', src)
@@ -185,7 +234,7 @@ RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
     local roll = math.random(1, 100)
     local permadeath = roll <= chance
 
-    if state.alreadyDead then
+    if state.alreadyDead or IsCharacterPermadead(state.characterId) then
         chance = 100
         roll = 1
         permadeath = true
@@ -193,12 +242,18 @@ RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
 
     local ok, err = pcall(function()
         if permadeath then
-            SetCharacterPermadead(src, state.characterId, state.coords)
+            local saved = SetCharacterPermadead(src, state.characterId, state.coords)
+            if not saved then
+                error('database update returned 0 affected rows')
+            end
         end
     end)
 
     if not ok then
-        print(('[cw-death] Failed to set permadeath for character %s: %s'):format(tostring(state.characterId), tostring(err)))
+        print(('[cw-death] Failed to set permadeath for character %s: %s'):format(
+            tostring(state.characterId),
+            tostring(err)
+        ))
         permadeath = false
     end
 
@@ -223,3 +278,5 @@ end)
 
 exports('GetPermadeathChance', GetPermadeathChance)
 exports('SetPermadeathChance', SetPermadeathChance)
+exports('IsCharacterPermadead', IsCharacterPermadead)
+exports('IsPlayerDeathLocked', IsPlayerDeathLocked)

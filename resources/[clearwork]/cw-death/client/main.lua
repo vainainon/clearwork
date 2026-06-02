@@ -5,12 +5,10 @@ local isDowned = false
 local waitingRoll = false
 local rollRequested = false
 local permanentDead = false
-
 local downedUntil = 0
 local rouletteCountdownUntil = 0
 local downCoords = nil
 local currentChance = nil
-
 local nextPositionSave = 0
 local nextUiTick = 0
 local nextRagdollTick = 0
@@ -48,13 +46,19 @@ local function SetInvincible(state)
 end
 
 local function IsPedDead(ped)
-    if IsEntityDead(ped) then return true end
+    if IsEntityDead(ped) then
+        return true
+    end
 
     if type(IsPedFatallyInjured) == 'function' and IsPedFatallyInjured(ped) then
         return true
     end
 
     return false
+end
+
+local function IsSwitchBlocked()
+    return isDowned or waitingRoll or permanentDead
 end
 
 local function ResetDeathState(hideUi)
@@ -79,11 +83,10 @@ local function EndKnockdown()
     if permanentDead then return end
 
     local coords = downCoords or GetCurrentCoords()
-
     ResetDeathState(true)
+
     TriggerEvent('cw-spawn:client:respawnHere', coords)
     ClearPedTasksImmediately(PlayerPedId())
-
     TriggerServerEvent('cw-death:server:saveDownedPosition', coords)
 end
 
@@ -95,16 +98,13 @@ local function BeginKnockdown()
     SetNuiFocusKeepInput(false)
 
     downCoords = GetCurrentCoords()
-
     isDowned = true
     waitingRoll = true
     rollRequested = false
     permanentDead = false
     currentChance = nil
-
     downedUntil = 0
     rouletteCountdownUntil = GetGameTimer() + (ROULETTE_COUNTDOWN_SECONDS * 1000)
-
     nextPositionSave = 0
     nextUiTick = 0
     nextRagdollTick = 0
@@ -130,7 +130,7 @@ CreateThread(function()
     while true do
         Wait(250)
 
-        if not isDowned and not waitingRoll then
+        if not isDowned and not waitingRoll and not permanentDead then
             local ped = PlayerPedId()
 
             if ped and ped ~= 0 and DoesEntityExist(ped) and IsPedDead(ped) then
@@ -261,7 +261,6 @@ RegisterNetEvent('cw-death:client:adminRevive', function(coords)
     ResetDeathState(true)
     TriggerEvent('cw-spawn:client:respawnHere', downCoords)
     ClearPedTasksImmediately(PlayerPedId())
-
     TriggerServerEvent('cw-death:server:saveDownedPosition', downCoords)
 end)
 
@@ -286,3 +285,5 @@ AddEventHandler('onResourceStop', function(resourceName)
     SetInvincible(false)
     ShowUi('downed:hide')
 end)
+
+exports('IsSwitchBlocked', IsSwitchBlocked)
