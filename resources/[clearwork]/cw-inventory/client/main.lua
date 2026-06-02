@@ -1,8 +1,36 @@
 local Config = CWInventoryConfig or {}
-local InventoryClientVersion = 'v25-ground-loot-panel'
+local InventoryClientVersion = 'v26-ground-pile-anim'
 print(('[cw-inventory:client] loaded %s'):format(InventoryClientVersion))
 local uiOpen = false
 local lastState = nil
+local dropBags = {}
+
+local function playGroundLootAnim(kind)
+    local ped = PlayerPedId()
+    if not ped or ped == 0 then return end
+
+    CreateThread(function()
+        local scenario = Config.GroundLootScenario or 'WORLD_HUMAN_CROUCH_INSPECT'
+        local duration = tonumber(Config.GroundLootAnimMs) or 900
+        pcall(function()
+            TaskStartScenarioInPlace(ped, GetHashKey(scenario), duration, true, false, false, false)
+        end)
+        Wait(duration)
+        pcall(function() ClearPedTasks(ped) end)
+    end)
+end
+
+local function removeDropBag(pileId)
+    pileId = tostring(pileId or '')
+    if pileId == '' then return end
+    local obj = dropBags[pileId]
+    dropBags[pileId] = nil
+    if obj and obj ~= 0 then
+        pcall(function()
+            if DoesEntityExist(obj) then DeleteObject(obj) end
+        end)
+    end
+end
 
 
 local function currentCoordsPayload()
@@ -80,8 +108,13 @@ RegisterNetEvent('cw-inventory:client:success', function(message)
     SendNUIMessage({ action = 'notice', kind = 'success', message = tostring(message or 'Готово.') })
 end)
 
-RegisterNetEvent('cw-inventory:client:spawnDropBag', function(data)
+RegisterNetEvent('cw-inventory:client:ensureDropBag', function(data)
     data = type(data) == 'table' and data or {}
+    local pileId = tostring(data.pile_id or data.pileId or data.drop_id or data.dropId or 'default')
+    if dropBags[pileId] and dropBags[pileId] ~= 0 and DoesEntityExist(dropBags[pileId]) then
+        return
+    end
+
     local coords = data.coords
     if type(coords) ~= 'table' then
         local ped = PlayerPedId()
@@ -116,9 +149,19 @@ RegisterNetEvent('cw-inventory:client:spawnDropBag', function(data)
     if obj and obj ~= 0 then
         PlaceObjectOnGroundProperly(obj)
         FreezeEntityPosition(obj, true)
+        dropBags[pileId] = obj
     end
 
     SetModelAsNoLongerNeeded(hash)
+end)
+
+RegisterNetEvent('cw-inventory:client:spawnDropBag', function(data)
+    TriggerEvent('cw-inventory:client:ensureDropBag', data)
+end)
+
+RegisterNetEvent('cw-inventory:client:despawnDropBag', function(data)
+    data = type(data) == 'table' and data or {}
+    removeDropBag(data.pile_id or data.pileId or data.drop_id or data.dropId)
 end)
 
 RegisterNUICallback('close', function(_, cb)
@@ -156,6 +199,7 @@ RegisterNUICallback('dropItem', function(data, cb)
         z = coords.z,
         heading = GetEntityHeading(ped)
     }
+    playGroundLootAnim('drop')
     TriggerServerEvent('cw-inventory:server:dropItem', data)
     cb({ ok = true })
 end)
@@ -164,6 +208,7 @@ end)
 RegisterNUICallback('pickupDropItem', function(data, cb)
     data = type(data) == 'table' and data or {}
     data.coords = currentCoordsPayload()
+    playGroundLootAnim('pickup')
     TriggerServerEvent('cw-inventory:server:pickupDropItem', data)
     cb({ ok = true })
 end)
@@ -187,4 +232,7 @@ AddEventHandler('onClientResourceStop', function(resourceName)
     if resourceName ~= GetCurrentResourceName() then return end
     SetNuiFocus(false, false)
     SendNUIMessage({ action = 'close' })
+    for pileId in pairs(dropBags) do
+        removeDropBag(pileId)
+    end
 end)

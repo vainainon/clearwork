@@ -2,8 +2,8 @@
     'use strict';
 
     var DEBUG = true;
-    var INVENTORY_JS_VERSION = 'v25-larger-cells';
-    var CELL = 42;
+    var INVENTORY_JS_VERSION = 'v26-admin-readable-cells-delete-log';
+    var CELL = 48;
 
     var lastCharacters = [];
     var currentAdminRole = null;
@@ -280,8 +280,8 @@
             '.admin-grid-item { position: absolute; box-sizing: border-box; border: 2px solid rgba(59,33,15,.8); background: rgba(59,33,15,.18); padding: 4px; overflow: hidden; pointer-events: auto; cursor: grab; user-select: none; }',
             '.admin-catalog-item.dragging-source, .admin-grid-item.dragging-source, .admin-equip-item.dragging-source { opacity: .32 !important; filter: grayscale(.25); }',
             '.admin-catalog-item.dragging-source *, .admin-grid-item.dragging-source *, .admin-equip-item.dragging-source * { opacity: .45 !important; }',
-            '.admin-grid-item .item-name { position: absolute; left: 3px; right: 3px; top: 3px; bottom: 14px; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; font-size: 13px; line-height: 1.05; overflow-wrap: anywhere; word-break: break-word; overflow: hidden; }',
-            '.admin-grid-item .item-meta { position: absolute; right: 4px; bottom: 2px; font-size: 11px; opacity: .9; background: rgba(241,223,170,.65); padding: 0 2px; }',
+            '.admin-grid-item .item-name { position: absolute; inset: 0; padding: 3px 4px 14px; display: flex; align-items: center; justify-content: center; text-align: center; font-weight: 700; font-size: 13px; line-height: 1.05; overflow-wrap: anywhere; word-break: break-word; overflow: hidden; }',
+            '.admin-grid-item .item-meta { position: absolute; right: 1px; bottom: 0; min-width: 14px; text-align: right; font-size: 11px; line-height: 13px; opacity: .95; background: rgba(241,223,170,.72); padding: 0 2px; z-index: 2; }',
             '.admin-equip-item { overflow-wrap: anywhere; word-break: break-word; }',
             '.admin-catalog-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }',
             '.admin-catalog-tabs button { padding: 7px 9px; font-size: 12px; }',
@@ -303,6 +303,7 @@
             '.inventory-log-table { width: 100%; min-width: 620px; border-collapse: collapse; font-size: 12px; table-layout: fixed; }',
             '.inventory-log-table th, .inventory-log-table td { border: 1px solid rgba(59,33,15,.45); padding: 5px; vertical-align: top; word-break: break-word; }',
             '.inventory-log-table th { background: rgba(59,33,15,.12); position: sticky; top: 0; z-index: 1; }',
+            '.inventory-log-details { margin-top: 3px; font-size: 11px; line-height: 1.15; opacity: .85; }',
             '.inventory-log-time { width: 112px; white-space: nowrap; }',
             '.inventory-log-action { width: 108px; }',
             '.inventory-log-amount { width: 48px; text-align: center; }',
@@ -1056,6 +1057,29 @@
             '<div class="admin-drag-ghost-label">' + escapeHtml(label) + '</div>';
     }
 
+    function parseMaybeJson(value) {
+        if (!value) return null;
+        if (typeof value === 'object') return value;
+        if (typeof value !== 'string') return null;
+        try { return JSON.parse(value); } catch (e) { return null; }
+    }
+
+    function compactDeletedContents(log) {
+        var before = parseMaybeJson(log.before_json) || {};
+        var after = parseMaybeJson(log.after_json) || {};
+        var contents = before.contents || after.contents || [];
+        if (!contents || !contents.length) return '';
+        return contents.map(function (it) {
+            return '#' + escapeHtml(it.id || '-') + ' ' + escapeHtml(it.item_name || it.label || 'item') + ' x' + escapeHtml(it.amount || 1);
+        }).join(', ');
+    }
+
+    function logActorText(log) {
+        var after = parseMaybeJson(log.after_json) || {};
+        var before = parseMaybeJson(log.before_json) || {};
+        return after.deleted_by || after.reason || before.reason || '';
+    }
+
     function renderLogs(logs) {
         logs = logs || [];
         if (!logs.length) {
@@ -1067,13 +1091,19 @@
                 '<table class="inventory-log-table">' +
                     '<thead><tr><th class="inventory-log-time">Время</th><th class="inventory-log-action">Действие</th><th>Предмет</th><th class="inventory-log-amount">Кол-во</th><th>Откуда</th><th>Куда</th></tr></thead>' +
                     '<tbody>' + logs.slice(0, 80).map(function (log) {
+                        var deletedDetails = compactDeletedContents(log);
+                        var actor = logActorText(log);
+                        var itemText = escapeHtml(log.item_name || '-');
+                        if (deletedDetails) itemText += '<div class="inventory-log-details">Внутри удалено: ' + deletedDetails + '</div>';
+                        var fromText = escapeHtml(log.from_container || log.from_slot || '-');
+                        if (actor && String(actor).indexOf('Админ:') === 0) fromText += '<div class="inventory-log-details">' + escapeHtml(actor) + '</div>';
                         return '' +
                             '<tr>' +
                                 '<td class="inventory-log-time" title="' + escapeHtml(log.created_at || '-') + '">' + escapeHtml(formatLogTime(log.created_at)) + '</td>' +
                                 '<td class="inventory-log-action" title="' + escapeHtml(log.action || '-') + '">' + escapeHtml(actionLabel(log.action)) + '</td>' +
-                                '<td>' + escapeHtml(log.item_name || '-') + '</td>' +
+                                '<td>' + itemText + '</td>' +
                                 '<td class="inventory-log-amount">' + escapeHtml(log.amount || '-') + '</td>' +
-                                '<td>' + escapeHtml(log.from_container || log.from_slot || '-') + '</td>' +
+                                '<td>' + fromText + '</td>' +
                                 '<td>' + escapeHtml(log.to_container || log.to_slot || '-') + '</td>' +
                             '</tr>';
                     }).join('') + '</tbody>' +

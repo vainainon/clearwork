@@ -10,7 +10,7 @@
     var groundEl = document.getElementById('ground');
     var selectionInfo = document.getElementById('selectionInfo');
 
-    var APP_VERSION = 'v25-ground-loot-panel';
+    var APP_VERSION = 'v26-ground-target-drop';
     var CELL = 48;
     var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {}, ground: null };
     var selected = null;
@@ -239,12 +239,32 @@
         return cells;
     }
 
+    function collectGroundPreviewCells(cell, size) {
+        if (!cell) return [];
+        size = size || { w: 1, h: 1 };
+        var grid = closestElement(cell, '.ground-grid');
+        if (!grid) return [];
+
+        var startX = Number(cell.dataset.x || 0);
+        var startY = Number(cell.dataset.y || 0);
+        var cells = [];
+        for (var yy = 0; yy < size.h; yy++) {
+            for (var xx = 0; xx < size.w; xx++) {
+                var found = grid.querySelector('.ground-cell[data-x="' + (startX + xx) + '"][data-y="' + (startY + yy) + '"]');
+                if (found) cells.push(found);
+            }
+        }
+        return cells;
+    }
+
     function setDragPreview(target, size) {
-        var element = target && (target.cell || target.slot) ? (target.cell || target.slot) : null;
+        var element = target && (target.cell || target.slot || target.groundCell) ? (target.cell || target.slot || target.groundCell) : null;
         size = size || { w: 1, h: 1 };
         var key = 'none';
         if (target && target.cell) {
             key = 'cell:' + (target.cell.dataset.container || '') + ':' + (target.cell.dataset.x || '0') + ':' + (target.cell.dataset.y || '0') + ':' + size.w + 'x' + size.h;
+        } else if (target && target.groundCell) {
+            key = 'ground:' + (target.groundCell.dataset.x || '0') + ':' + (target.groundCell.dataset.y || '0') + ':' + size.w + 'x' + size.h;
         } else if (target && target.slot) {
             key = 'slot:' + (target.slot.dataset.slot || '');
         }
@@ -258,6 +278,9 @@
 
         if (target && target.cell) {
             dragPreviewElements = collectPreviewCells(target.cell, size);
+            dragPreviewElements.forEach(function (cell) { cell.classList.add('drop-preview'); });
+        } else if (target && target.groundCell) {
+            dragPreviewElements = collectGroundPreviewCells(target.groundCell, size);
             dragPreviewElements.forEach(function (cell) { cell.classList.add('drop-preview'); });
         }
     }
@@ -287,11 +310,27 @@
         return grid.querySelector('.cell[data-x="' + cx + '"][data-y="' + cy + '"]');
     }
 
+    function getGroundCellFromPoint(x, y) {
+        var under = document.elementFromPoint(x, y);
+        var cell = closestElement(under, '.ground-cell');
+        if (cell) return cell;
+
+        var grid = closestElement(under, '.ground-grid');
+        if (!grid) return null;
+
+        var rect = grid.getBoundingClientRect();
+        var cx = Math.floor((x - rect.left) / CELL);
+        var cy = Math.floor((y - rect.top) / CELL);
+        if (cx < 0 || cy < 0) return null;
+        return grid.querySelector('.ground-cell[data-x="' + cx + '"][data-y="' + cy + '"]');
+    }
+
     function getDropTargetFromPoint(x, y) {
         var under = document.elementFromPoint(x, y);
         var slot = closestElement(under, '.equip-slot');
         var cell = getCellFromPoint(x, y);
-        return { cell: cell, slot: slot };
+        var groundCell = getGroundCellFromPoint(x, y);
+        return { cell: cell, slot: slot, groundCell: groundCell };
     }
 
     function startItemMouseDrag(event, item, options) {
@@ -421,6 +460,20 @@
             return true;
         }
 
+        if (target.groundCell) {
+            if (drag.source !== 'ground') {
+                post('dropItem', {
+                    itemId: item.id,
+                    target: {
+                        type: 'ground',
+                        x: Number(target.groundCell.dataset.x || 0),
+                        y: Number(target.groundCell.dataset.y || 0)
+                    }
+                });
+            }
+            return true;
+        }
+
         if (!shell) {
             if (drag.source !== 'ground') {
                 post('dropItem', { itemId: item.id });
@@ -535,6 +588,8 @@
             for (var xx = 0; xx < w; xx++) {
                 var cell = document.createElement('div');
                 cell.className = 'ground-cell';
+                cell.dataset.x = xx;
+                cell.dataset.y = yy;
                 grid.appendChild(cell);
             }
         }

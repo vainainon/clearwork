@@ -78,3 +78,45 @@ button:hover { background: #343127; }
 .ground-empty { margin-top: 10px; color: #8c826d; font-style: italic; font-size: 13px; }
 .ground-help { margin-top: 12px; }
 @media (max-width: 1250px) { .layout { grid-template-columns: 300px minmax(0, 1fr); } .ground-panel { display: none; } }
+
+/* v26: readable centered labels and ground-drop target preview */
+.grid-item, .ground-item { padding: 0; }
+.grid-item .item-name,
+.ground-item .item-name {
+    position: absolute;
+    inset: 0;
+    padding: 3px 4px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    max-height: none;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    hyphens: auto;
+    font-size: 13px;
+    line-height: 1.05;
+}
+.grid-item .item-meta,
+.ground-item .item-meta,
+.item-meta {
+    position: absolute;
+    right: 1px;
+    bottom: 0;
+    min-width: 14px;
+    text-align: right;
+    font-size: 12px;
+    line-height: 13px;
+    color: #e6dbc0;
+    background: rgba(20,18,15,.55);
+    padding: 0 2px;
+    z-index: 7;
+}
+.ground-cell.drag-over,
+.ground-cell.drop-preview {
+    outline: 2px solid rgba(210,179,111,.95);
+    outline-offset: -2px;
+    background: rgba(210,179,111,.18);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
+}

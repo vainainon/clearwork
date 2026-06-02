@@ -1,5 +1,5 @@
 local InventoryDebug = true
-local InventoryIntegrationVersion = 'v25-admin-name-delete-contents'
+local InventoryIntegrationVersion = 'v26-admin-delete-log-actor'
 local OpenedCharacterInventories = {}
 local unpackArgs = table.unpack or unpack
 
@@ -613,7 +613,7 @@ local function handleDeleteItemEvent(src, data, origin)
 
     local characterId = resolveCharacterId(src, data)
     local itemId = tonumber(data.itemId or data.item_id or data.id)
-    local reason = tostring(data.reason or 'cw-admin inventory panel right click delete')
+    local reason = ('Админ: %s'):format(getActorDisplayName(src))
 
     dbg('deleteItem normalized src=%s characterId=%s itemId=%s reason=%s', tostring(src), tostring(characterId), tostring(itemId), reason)
 

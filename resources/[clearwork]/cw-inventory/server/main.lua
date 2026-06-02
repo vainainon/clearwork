@@ -1,5 +1,5 @@
 local Config = CWInventoryConfig or {}
-local InventoryServerVersion = 'v25-ground-loot-delete-contents'
+local InventoryServerVersion = 'v26-ground-pile-loot-order-delete-log'
 
 print(('[cw-inventory] loaded %s'):format(InventoryServerVersion))
 
@@ -41,8 +41,11 @@ local Locks = {}
 -- Временная серверная куча предметов на земле.
 -- Позже это можно вынести в отдельный cw-drops/cw-worlditems и сохранять в БД.
 local GroundDrops = {}
+local GroundPiles = {}
 local NextGroundDropId = 1
+local NextGroundPileId = 1
 Config.GroundLootRadius = tonumber(Config.GroundLootRadius) or 1.5
+Config.GroundPileMergeRadius = tonumber(Config.GroundPileMergeRadius) or 1.0
 Config.GroundLootWidth = tonumber(Config.GroundLootWidth) or 6
 Config.GroundLootHeight = tonumber(Config.GroundLootHeight) or 8
 
@@ -231,10 +234,84 @@ local function getSourceCoords(src)
     return nil
 end
 
+local function cleanupGroundPiles()
+    local alive = {}
+    for _, drop in pairs(GroundDrops) do
+        if drop and drop.pile_id then
+            alive[tonumber(drop.pile_id)] = true
+        end
+    end
+
+    for pileId in pairs(GroundPiles) do
+        if not alive[tonumber(pileId)] then
+            GroundPiles[pileId] = nil
+        end
+    end
+end
+
+local function countPileItems(pileId)
+    local count = 0
+    pileId = tonumber(pileId)
+    if not pileId then return 0 end
+    for _, drop in pairs(GroundDrops) do
+        if drop and tonumber(drop.pile_id) == pileId then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function findNearbyGroundPile(coords)
+    if type(coords) ~= 'table' then return nil end
+    local best = nil
+    local bestDistance = nil
+    local radius = tonumber(Config.GroundPileMergeRadius) or 1.0
+
+    cleanupGroundPiles()
+
+    for _, pile in pairs(GroundPiles) do
+        if pile and type(pile.coords) == 'table' then
+            local distance = vectorDistance(coords, pile.coords)
+            if distance <= radius and (bestDistance == nil or distance < bestDistance) then
+                best = pile
+                bestDistance = distance
+            end
+        end
+    end
+
+    return best
+end
+
+local function createGroundPile(coords, src)
+    coords = type(coords) == 'table' and coords or getSourceCoords(src) or { x = 0.0, y = 0.0, z = 0.0 }
+    local pileId = NextGroundPileId
+    NextGroundPileId = NextGroundPileId + 1
+
+    GroundPiles[pileId] = {
+        id = pileId,
+        coords = { x = tonumber(coords.x) or 0.0, y = tonumber(coords.y) or 0.0, z = tonumber(coords.z) or 0.0 },
+        created_at = os.time(),
+        updated_at = os.time()
+    }
+
+    return GroundPiles[pileId]
+end
+
+local function getOrCreateGroundPile(coords, src)
+    local pile = findNearbyGroundPile(coords)
+    if pile then
+        pile.updated_at = os.time()
+        return pile, false
+    end
+    return createGroundPile(coords, src), true
+end
+
 local function packGroundDropsForCoords(coords)
     local width = math.max(1, tonumber(Config.GroundLootWidth) or 6)
     local height = math.max(1, tonumber(Config.GroundLootHeight) or 8)
     local nearby = {}
+
+    cleanupGroundPiles()
 
     for _, drop in pairs(GroundDrops) do
         if drop and type(drop.item) == 'table' and vectorDistance(coords, drop.coords) <= (Config.GroundLootRadius or 1.5) then
@@ -276,6 +353,7 @@ local function packGroundDropsForCoords(coords)
                 if isFree(x, y, w, h) then
                     item.drop_id = drop.id
                     item.ground_id = drop.id
+                    item.pile_id = drop.pile_id
                     item.id = 'drop_' .. tostring(drop.id)
                     item.x = x
                     item.y = y
@@ -305,19 +383,23 @@ end
 local function addGroundDropFromItem(item, coords, src, characterId)
     if type(item) ~= 'table' then return nil end
     coords = type(coords) == 'table' and coords or getSourceCoords(src) or { x = 0.0, y = 0.0, z = 0.0 }
+
+    local pile, createdPile = getOrCreateGroundPile(coords, src)
     local dropId = NextGroundDropId
     NextGroundDropId = NextGroundDropId + 1
 
+    local pileCoords = pile and pile.coords or coords
     GroundDrops[dropId] = {
         id = dropId,
+        pile_id = pile and pile.id or nil,
         item = copy(item),
-        coords = { x = tonumber(coords.x) or 0.0, y = tonumber(coords.y) or 0.0, z = tonumber(coords.z) or 0.0 },
+        coords = { x = tonumber(pileCoords.x) or 0.0, y = tonumber(pileCoords.y) or 0.0, z = tonumber(pileCoords.z) or 0.0 },
         dropped_by = tonumber(characterId),
         dropped_source = tonumber(src) or 0,
         created_at = os.time()
     }
 
-    return GroundDrops[dropId]
+    return GroundDrops[dropId], pile, createdPile
 end
 
 local function characterExists(characterId)
@@ -469,6 +551,20 @@ local function buildEquipment(items)
     return equipment
 end
 
+local function containerDisplayOrder(containerId, defaultOrder)
+    local explicit = {
+        coat = 10,
+        pockets = 20,
+        pants = 30,
+        vest = 40,
+        belt = 50
+    }
+    if explicit[tostring(containerId or '')] then
+        return explicit[tostring(containerId or '')]
+    end
+    return tonumber(defaultOrder) or 999
+end
+
 local function buildContainers(items)
     local containers = {}
     for id, data in pairs(Config.BaseContainers or {}) do
@@ -477,7 +573,7 @@ local function buildContainers(items)
             label = data.label or id,
             width = tonumber(data.width) or 1,
             height = tonumber(data.height) or 1,
-            order = tonumber(data.order) or 999,
+            order = containerDisplayOrder(id, data.order),
             source = 'base'
         }
     end
@@ -492,7 +588,7 @@ local function buildContainers(items)
                 label = c.label or c.id,
                 width = tonumber(c.width) or 1,
                 height = tonumber(c.height) or 1,
-                order = tonumber(c.order) or 500,
+                order = containerDisplayOrder(c.id, c.order),
                 source = item.equip_slot,
                 source_item = item.id
             }
@@ -901,6 +997,7 @@ local function addItemToCharacter(characterId, itemName, amount, metadata, actor
                         item_id = item.id,
                         item_name = itemName,
                         amount = add,
+                        from_container = reason or 'resource_export',
                         to_container = item.container_id,
                         before_json = item,
                         after_json = getItem(characterId, item.id)
@@ -925,6 +1022,7 @@ local function addItemToCharacter(characterId, itemName, amount, metadata, actor
                 item_id = insertId,
                 item_name = itemName,
                 amount = stackAmount,
+                from_container = reason or 'resource_export',
                 to_container = containerId,
                 after_json = getItem(characterId, insertId),
                 before_json = { reason = reason or 'add' }
@@ -1057,6 +1155,7 @@ local function addItemToCharacterAt(characterId, itemName, amount, metadata, tar
             item_id = insertId,
             item_name = itemName,
             amount = amount,
+            from_container = reason == 'ground_pickup' and 'Земля' or (reason or 'admin'),
             to_container = containerId,
             before_json = { reason = reason or 'admin_add' },
             after_json = getItem(characterId, insertId)
@@ -1264,7 +1363,9 @@ local function deleteItemFromCharacter(characterId, itemId, actorAccountId, acto
             after_json = {
                 deleted = true,
                 reason = reason or 'delete',
-                contents_deleted = #deletedContents
+                deleted_by = reason or 'delete',
+                contents_deleted = #deletedContents,
+                contents = deletedContents
             }
         })
 
@@ -1342,12 +1443,13 @@ RegisterNetEvent('cw-inventory:server:dropItem', function(payload)
         return
     end
 
-    local drop = addGroundDropFromItem(resultOrMsg, coords, src, characterId)
+    local drop, pile = addGroundDropFromItem(resultOrMsg, coords, src, characterId)
     TriggerClientEvent('cw-inventory:client:success', src, 'Предмет выброшен на землю.')
-    TriggerClientEvent('cw-inventory:client:spawnDropBag', src, {
+    TriggerClientEvent('cw-inventory:client:ensureDropBag', src, {
         item = resultOrMsg,
         drop_id = drop and drop.id,
-        coords = coords,
+        pile_id = pile and pile.id or (drop and drop.pile_id),
+        coords = pile and pile.coords or coords,
         model = Config.DropBagModel or 'p_bag01x'
     })
     sendState(src)
@@ -1405,10 +1507,16 @@ RegisterNetEvent('cw-inventory:server:pickupDropItem', function(payload)
         return
     end
 
+    local pileId = tonumber(drop.pile_id)
     if amount >= available then
         GroundDrops[dropId] = nil
     else
         drop.item.amount = available - amount
+    end
+
+    if pileId and countPileItems(pileId) <= 0 then
+        GroundPiles[pileId] = nil
+        TriggerClientEvent('cw-inventory:client:despawnDropBag', src, { pile_id = pileId })
     end
 
     TriggerClientEvent('cw-inventory:client:success', src, 'Предмет поднят.')
