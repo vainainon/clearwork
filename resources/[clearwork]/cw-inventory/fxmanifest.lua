@@ -3,8 +3,8 @@ game 'rdr3'
 rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.'
 
 author 'clearwork'
-description 'ClearWork Tarkov-style Inventory MVP'
-version '0.1.1'
+description 'ClearWork Tarkov-style Inventory Core'
+version '0.1.2'
 
 ui_page 'html/index.html'
 
@@ -15,8 +15,8 @@ files {
 }
 
 shared_scripts {
-    'shared/config.lua',
-    'shared/items.lua'
+    '@cw-items/shared/items.lua',
+    'shared/config.lua'
 }
 
 server_scripts {
@@ -28,4 +28,7 @@ client_scripts {
     'client/main.lua'
 }
 
-dependency 'oxmysql'
+dependencies {
+    'oxmysql',
+    'cw-items'
+}

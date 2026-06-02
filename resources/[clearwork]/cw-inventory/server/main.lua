@@ -1,5 +1,5 @@
 local Config = CWInventoryConfig or {}
-local Items = CWInventoryItems or {}
+local Items = CWItems or {}
 local Locks = {}
 
 local function dbg(message, ...)
@@ -126,6 +126,11 @@ local function withLock(characterId, cb)
     return a, b, c
 end
 
+local bumpRevision
+local logAction
+local getItem
+local firstFreePlace
+
 local function ensureState(characterId)
     if not ensureSchema() then error('database schema is not ready') end
     local exists = MySQL.scalar.await('SELECT character_id FROM cw_inventory_state WHERE character_id = ? LIMIT 1', { characterId })
@@ -136,15 +141,28 @@ local function ensureState(characterId)
         local name = tostring(starter.name or '')
         local def = Items.Get(name)
         if def then
-            MySQL.insert.await([[INSERT INTO cw_inventory_items
-                (character_id, item_name, amount, metadata, container_id, x, y, rotated, equip_slot)
-                VALUES (?, ?, ?, ?, 'pockets', ?, ?, 0, NULL)]],
-                { characterId, name, tonumber(starter.amount) or 1, enc(starter.metadata or {}), 0, 0 })
+            local containerId, x, y, rotated = firstFreePlace(characterId, name)
+            if containerId then
+                local insertId = MySQL.insert.await([[INSERT INTO cw_inventory_items
+                    (character_id, item_name, amount, metadata, container_id, x, y, rotated, equip_slot)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)]],
+                    { characterId, name, tonumber(starter.amount) or 1, enc(starter.metadata or {}), containerId, x, y, rotated and 1 or 0 })
+
+                logAction(characterId, nil, 'starter', {
+                    item_id = insertId,
+                    item_name = name,
+                    amount = tonumber(starter.amount) or 1,
+                    to_container = containerId,
+                    after_json = getItem(characterId, insertId)
+                })
+            end
         end
     end
+
+    bumpRevision(characterId)
 end
 
-local function bumpRevision(characterId)
+bumpRevision = function(characterId)
     MySQL.update.await('UPDATE cw_inventory_state SET revision = revision + 1 WHERE character_id = ?', { characterId })
 end
 
@@ -153,7 +171,7 @@ local function getRevision(characterId)
     return tonumber(MySQL.scalar.await('SELECT revision FROM cw_inventory_state WHERE character_id = ? LIMIT 1', { characterId })) or 0
 end
 
-local function logAction(characterId, accountId, action, data)
+logAction = function(characterId, accountId, action, data)
     if not ensureSchema() then return end
     data = data or {}
     MySQL.insert.await([[INSERT INTO cw_inventory_logs
@@ -218,7 +236,7 @@ local function getItems(characterId)
     return out
 end
 
-local function getItem(characterId, itemId)
+getItem = function(characterId, itemId)
     if not ensureSchema() then error('database schema is not ready') end
     local row = MySQL.single.await('SELECT * FROM cw_inventory_items WHERE id = ? AND character_id = ? LIMIT 1', { itemId, characterId })
     return normalizeItem(row)
@@ -322,7 +340,7 @@ local function canPlace(characterId, item, containerId, x, y, rotated, ignoreIte
     return true, nil
 end
 
-local function firstFreePlace(characterId, itemName)
+firstFreePlace = function(characterId, itemName)
     local temp = { item_name = itemName }
     local items = getItems(characterId)
     local containers = buildContainers(items)
@@ -516,7 +534,7 @@ local function addItemToCharacter(characterId, itemName, amount, metadata, actor
     amount = math.max(1, tonumber(amount) or 1)
     metadata = metadata or {}
     local def = Items.Get(itemName)
-    if not def then return false, 'Такого предмета нет в CWInventoryItems.' end
+    if not def then return false, 'Такого предмета нет в cw-items.' end
 
     ensureState(characterId)
     return withLock(characterId, function()

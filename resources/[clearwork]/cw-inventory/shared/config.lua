@@ -3,6 +3,7 @@ CWInventoryConfig = CWInventoryConfig or {}
 CWInventoryConfig.OpenCommand = 'cwinv'
 CWInventoryConfig.OpenKey = 'I'
 -- Проверок ролей здесь нет. Этот ресурс не управляет /cwadmin.
+-- Предметы описываются в отдельном ресурсе cw-items.
 -- Внешние серверные ресурсы могут использовать exports ниже, но права проверяют у себя.
 
 CWInventoryConfig.Debug = false
@@ -35,7 +36,7 @@ CWInventoryConfig.EquipmentSlots = {
 }
 
 CWInventoryConfig.DefaultStarterItems = {
-    -- Пустой список. Тестовые выдачи делаются внешним ресурсом через server export AddItemToCharacter.
+    -- Пустой список. Стартовый набор можно включить тут, когда решим, что должен получать новый персонаж.
     -- { name = 'bread', amount = 2 },
     -- { name = 'water', amount = 1 }
 }
