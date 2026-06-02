@@ -1,5 +1,5 @@
 RegisterNUICallback('characterInventoryOpen', function(data, cb)
-    TriggerServerEvent('cw-admin:server:inventory:open', tonumber(data and data.characterId))
+    TriggerServerEvent('cw-admin:server:inventory:open', tonumber(data and (data.characterId or data.character_id or data.id)))
     cb({ ok = true })
 end)
 
@@ -9,7 +9,7 @@ RegisterNUICallback('characterInventoryAddItem', function(data, cb)
 end)
 
 RegisterNUICallback('characterInventoryRefresh', function(data, cb)
-    TriggerServerEvent('cw-admin:server:inventory:open', tonumber(data and data.characterId))
+    TriggerServerEvent('cw-admin:server:inventory:open', tonumber(data and (data.characterId or data.character_id or data.id)))
     cb({ ok = true })
 end)
 

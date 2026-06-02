@@ -11,16 +11,17 @@
     var selectedAmount = 1;
     var selectedRotated = false;
     var activeCategory = 'all';
+    var activeCharacterId = null;
 
     var categoryLabels = {
         all: 'Все',
-        food: 'Еда',
-        drink: 'Напитки',
-        medical: 'Медицина',
-        ammo: 'Патроны',
-        weapon: 'Оружие',
-        clothing: 'Одежда',
         accessory: 'Украшения',
+        ammo: 'Патроны',
+        clothing: 'Одежда',
+        drink: 'Напитки',
+        food: 'Еда',
+        medical: 'Медицина',
+        weapon: 'Оружие',
         misc: 'Прочее'
     };
 
@@ -47,7 +48,39 @@
 
     function characterName(character) {
         character = character || {};
-        return String((character.firstname || '') + ' ' + (character.lastname || '')).trim() || ('Character #' + character.id);
+        return String((character.firstname || '') + ' ' + (character.lastname || '')).trim() || ('Character #' + (resolveCharacterId() || '-'));
+    }
+
+    function normalizeNumber(value) {
+        var n = Number(value);
+        return Number.isFinite(n) ? n : null;
+    }
+
+    function resolveCharacterId() {
+        var payload = activePayload || {};
+        var state = payload.state || {};
+        var character = payload.character || {};
+        var candidates = [
+            activeCharacterId,
+            payload.characterId,
+            payload.character_id,
+            character.id,
+            character.character_id,
+            state.character_id,
+            state.characterId
+        ];
+
+        for (var i = 0; i < candidates.length; i++) {
+            var id = normalizeNumber(candidates[i]);
+            if (id && id > 0) return id;
+        }
+
+        if (modalBody && modalBody.dataset && modalBody.dataset.characterId) {
+            var fromDataset = normalizeNumber(modalBody.dataset.characterId);
+            if (fromDataset && fromDataset > 0) return fromDataset;
+        }
+
+        return null;
     }
 
     function clampAmount(raw, max) {
@@ -69,9 +102,11 @@
     function effectiveSize(item) {
         var w = Number(item && item.width ? item.width : 1) || 1;
         var h = Number(item && item.height ? item.height : 1) || 1;
+
         if (selectedCatalog && item && item.name === selectedCatalog.name && selectedRotated) {
             return { w: h, h: w };
         }
+
         return { w: w, h: h };
     }
 
@@ -83,23 +118,23 @@
         style.textContent = [
             '.inventory-extra-actions { margin-top: 10px; display: grid; grid-template-columns: 1fr; gap: 8px; }',
             '.inventory-extra-actions button { background: #3b210f; }',
-            '.inventory-modal-box { width: 1260px; max-width: 94vw; max-height: 84vh; overflow: hidden; }',
+            '.inventory-modal-box { width: 1160px; max-width: 94vw; max-height: 84vh; overflow: hidden; }',
             '.inventory-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; margin-bottom: 12px; }',
             '.inventory-head h2 { margin: 0; }',
             '.inventory-head-actions { display: grid; grid-template-columns: 140px 140px; gap: 8px; }',
-            '.inventory-main-grid { display: grid; grid-template-columns: 245px minmax(430px, 1fr) 320px; gap: 12px; max-height: 64vh; overflow: hidden; }',
+            '.inventory-main-grid { display: grid; grid-template-columns: 240px minmax(430px, 1fr) 315px; gap: 12px; max-height: 64vh; overflow: hidden; }',
             '.inventory-column { min-height: 0; overflow-y: auto; padding-right: 4px; }',
             '.inventory-block { border: 2px solid #3b210f; background: rgba(255,244,205,.55); padding: 10px; margin-bottom: 10px; }',
             '.inventory-block h3 { margin: 0 0 8px; font-size: 20px; }',
             '.inventory-small { font-size: 13px; opacity: .85; }',
             '.admin-equip-list { display: grid; gap: 6px; }',
-            '.admin-equip-slot { border: 1px solid rgba(59,33,15,.65); background: rgba(241,223,170,.5); min-height: 54px; padding: 7px; }',
+            '.admin-equip-slot { border: 1px solid rgba(59,33,15,.65); background: rgba(241,223,170,.5); min-height: 52px; padding: 7px; }',
             '.admin-equip-slot.drag-over, .admin-inv-cell.drag-over { outline: 2px solid #8b0000; outline-offset: -2px; }',
             '.slot-title { font-weight: 700; letter-spacing: .05em; text-transform: uppercase; font-size: 12px; }',
             '.empty-slot { font-size: 13px; opacity: .68; margin-top: 5px; font-style: italic; }',
             '.admin-equip-item { margin-top: 5px; border: 1px solid rgba(59,33,15,.45); padding: 5px; background: rgba(59,33,15,.12); }',
             '.admin-container-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }',
-            '.admin-inv-grid { position: relative; display: grid; border: 1px solid rgba(59,33,15,.6); background: rgba(0,0,0,.05); }',
+            '.admin-inv-grid { position: relative; display: grid; border: 1px solid rgba(59,33,15,.6); background: rgba(0,0,0,.05); width: max-content; }',
             '.admin-inv-cell { width: ' + CELL + 'px; height: ' + CELL + 'px; border-right: 1px solid rgba(59,33,15,.24); border-bottom: 1px solid rgba(59,33,15,.24); box-sizing: border-box; }',
             '.admin-grid-item { position: absolute; box-sizing: border-box; border: 2px solid rgba(59,33,15,.8); background: rgba(59,33,15,.18); padding: 4px; overflow: hidden; pointer-events: none; }',
             '.admin-grid-item .item-name { font-weight: 700; font-size: 12px; line-height: 1.1; }',
@@ -120,6 +155,7 @@
             '.inventory-log-table th, .inventory-log-table td { border: 1px solid rgba(59,33,15,.45); padding: 5px; vertical-align: top; }',
             '.inventory-log-table th { background: rgba(59,33,15,.12); }'
         ].join('\n');
+
         document.head.appendChild(style);
     }
 
@@ -127,7 +163,6 @@
         if (modal) return;
 
         injectStyle();
-
         modal = document.createElement('div');
         modal.id = 'inventoryModal';
         modal.className = 'modal hidden';
@@ -138,15 +173,14 @@
         modalBody = document.getElementById('inventoryModalBody');
 
         modal.addEventListener('click', function (event) {
-            if (event.target === modal) {
-                closeModal();
-            }
+            if (event.target === modal) closeModal();
         });
     }
 
     function closeModal() {
         if (modal) modal.classList.add('hidden');
         activePayload = null;
+        activeCharacterId = null;
         selectedCatalog = null;
         selectedAmount = 1;
         selectedRotated = false;
@@ -167,16 +201,18 @@
                 stack: Number(def.stack || 1) || 1
             });
         });
+
         list.sort(function (a, b) {
             if (String(a.category) !== String(b.category)) return String(a.category).localeCompare(String(b.category), 'ru');
             return String(a.label).localeCompare(String(b.label), 'ru');
         });
+
         return list;
     }
 
     function itemLabel(item) {
         if (!item) return '-';
-        return item.label || item.item_name || item.name || '-';
+        return item.label || item.item_label || item.item_name || item.name || '-';
     }
 
     function getAllDefinitions() {
@@ -186,15 +222,22 @@
 
     function postAddItem(target) {
         if (!activePayload || !selectedCatalog) return;
-        var character = activePayload.character || {};
-        var state = activePayload.state || {};
+
+        var characterId = resolveCharacterId();
+        target = target || {};
+
+        if (characterId) {
+            target.characterId = characterId;
+        }
+
         post('characterInventoryAddItem', {
-            characterId: character.id || state.character_id,
+            characterId: characterId,
+            character_id: characterId,
             itemName: selectedCatalog.name,
             amount: selectedAmount || 1,
             metadata: '{}',
             reason: 'cw-admin inventory panel',
-            target: target || {}
+            target: target
         });
     }
 
@@ -235,17 +278,19 @@
 
     function renderEquipment(state) {
         var equipment = state.equipment || {};
-        var slots = state.equipmentSlots || [];
+        var slots = state.equipmentSlots || state.equipment_slots || [];
 
         if (!slots.length) {
             return '<div class="inventory-small">Слоты экипировки не загружены.</div>';
         }
 
         return '<div class="admin-equip-list">' + slots.map(function (slot) {
-            var item = equipment[slot.id];
+            var item = equipment[slot.id] || equipment[slot.slot] || null;
             return '<div class="admin-equip-slot" data-slot="' + escapeHtml(slot.id) + '">' +
                 '<div class="slot-title">' + escapeHtml(slot.label || slot.id) + '</div>' +
-                (item ? '<div class="admin-equip-item"><b>' + escapeHtml(itemLabel(item)) + '</b><br><span class="inventory-small">#' + escapeHtml(item.id) + ' | ' + escapeHtml(item.item_name) + '</span></div>' : '<div class="empty-slot">пусто</div>') +
+                (item ?
+                    '<div class="admin-equip-item"><strong>' + escapeHtml(itemLabel(item)) + '</strong><br>#' + escapeHtml(item.id) + ' | ' + escapeHtml(item.item_name) + '</div>' :
+                    '<div class="empty-slot">пусто</div>') +
                 '</div>';
         }).join('') + '</div>';
     }
@@ -269,8 +314,10 @@
             var rows = byContainer[container.id] || [];
             var w = Number(container.width || 1) || 1;
             var h = Number(container.height || 1) || 1;
-            var html = '<div class="inventory-block"><div class="admin-container-head"><h3>' + escapeHtml(container.label || container.id) + '</h3><span class="inventory-small">' + escapeHtml(w) + 'x' + escapeHtml(h) + '</span></div>';
-            html += '<div class="admin-inv-grid" data-container="' + escapeHtml(container.id) + '" style="grid-template-columns: repeat(' + w + ', ' + CELL + 'px); grid-template-rows: repeat(' + h + ', ' + CELL + 'px); width: ' + (w * CELL) + 'px; height: ' + (h * CELL) + 'px;">';
+
+            var html = '<div class="inventory-block">' +
+                '<div class="admin-container-head"><h3>' + escapeHtml(container.label || container.id) + '</h3><strong>' + escapeHtml(w) + 'x' + escapeHtml(h) + '</strong></div>' +
+                '<div class="admin-inv-grid" style="grid-template-columns: repeat(' + w + ', ' + CELL + 'px); grid-template-rows: repeat(' + h + ', ' + CELL + 'px);">';
 
             for (var y = 0; y < h; y++) {
                 for (var x = 0; x < w; x++) {
@@ -279,7 +326,16 @@
             }
 
             rows.forEach(function (item) {
-                html += '<div class="admin-grid-item" style="left:' + (Number(item.x || 0) * CELL) + 'px; top:' + (Number(item.y || 0) * CELL) + 'px; width:' + (Number(item.width || 1) * CELL) + 'px; height:' + (Number(item.height || 1) * CELL) + 'px;">' +
+                var itemW = Number(item.width || item.w || 1) || 1;
+                var itemH = Number(item.height || item.h || 1) || 1;
+
+                if (item.rotated === true || item.rotated === 1) {
+                    var tmp = itemW;
+                    itemW = itemH;
+                    itemH = tmp;
+                }
+
+                html += '<div class="admin-grid-item" style="left:' + (Number(item.x || 0) * CELL) + 'px; top:' + (Number(item.y || 0) * CELL) + 'px; width:' + (itemW * CELL) + 'px; height:' + (itemH * CELL) + 'px;">' +
                     '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                     '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) + ' ' : '') + '#' + escapeHtml(item.id) + '</div>' +
                     '</div>';
@@ -296,9 +352,8 @@
             return '<div class="inventory-small">Логов пока нет.</div>';
         }
 
-        return '<table class="inventory-log-table"><thead><tr>' +
-            '<th>Время</th><th>Действие</th><th>Предмет</th><th>Кол-во</th><th>Откуда</th><th>Куда</th>' +
-            '</tr></thead><tbody>' + logs.slice(0, 50).map(function (log) {
+        return '<table class="inventory-log-table"><thead><tr><th>Время</th><th>Действие</th><th>Предмет</th><th>Кол-во</th><th>Откуда</th><th>Куда</th></tr></thead><tbody>' +
+            logs.slice(0, 50).map(function (log) {
                 return '<tr>' +
                     '<td>' + escapeHtml(log.created_at || '-') + '</td>' +
                     '<td>' + escapeHtml(log.action || '-') + '</td>' +
@@ -307,12 +362,14 @@
                     '<td>' + escapeHtml(log.from_container || log.from_slot || '-') + '</td>' +
                     '<td>' + escapeHtml(log.to_container || log.to_slot || '-') + '</td>' +
                     '</tr>';
-            }).join('') + '</tbody></table>';
+            }).join('') +
+            '</tbody></table>';
     }
 
     function getCategories(definitions) {
         var seen = { all: true };
         var cats = ['all'];
+
         definitions.forEach(function (item) {
             var cat = item.category || 'misc';
             if (!seen[cat]) {
@@ -320,14 +377,16 @@
                 cats.push(cat);
             }
         });
+
         return cats;
     }
 
-    function renderCatalog(payload) {
+    function renderCatalog() {
         var definitions = getAllDefinitions();
         var search = document.getElementById('adminCatalogSearch');
         var query = search ? String(search.value || '').toLowerCase() : '';
         var cats = getCategories(definitions);
+
         var list = definitions.filter(function (item) {
             if (activeCategory !== 'all' && item.category !== activeCategory) return false;
             if (!query) return true;
@@ -341,16 +400,15 @@
         }
 
         return '<div class="inventory-block"><h3>Предметы</h3>' +
-            '<div class="admin-catalog-controls">' +
-                '<input id="adminCatalogSearch" type="text" placeholder="Поиск предмета" value="' + escapeHtml(query) + '">' +
-                '<div class="admin-selected-line">' + escapeHtml(selectedText) + '<br><span class="inventory-small">Перетащи предмет в слот. Ctrl при выборе — количество. R — повернуть.</span></div>' +
-            '</div>' +
+            '<div class="admin-catalog-controls"><input id="adminCatalogSearch" type="text" placeholder="Поиск предмета"></div>' +
+            '<div class="admin-selected-line">' + escapeHtml(selectedText) + '<br>Перетащи предмет в слот. Ctrl при выборе — количество. R — повернуть.</div>' +
             '<div class="admin-catalog-tabs">' + cats.map(function (cat) {
                 return '<button type="button" class="catalog-tab ' + (cat === activeCategory ? 'active' : '') + '" data-category="' + escapeHtml(cat) + '">' + escapeHtml(categoryLabels[cat] || cat) + '</button>';
             }).join('') + '</div>' +
             '<div class="admin-catalog-list">' + list.map(function (item) {
                 var size = effectiveSize(item);
-                return '<div class="admin-catalog-item' + (selectedCatalog && selectedCatalog.name === item.name ? ' selected' : '') + '" draggable="true" data-item="' + escapeHtml(item.name) + '">' +
+                var selectedClass = selectedCatalog && selectedCatalog.name === item.name ? ' selected' : '';
+                return '<div class="admin-catalog-item' + selectedClass + '" draggable="true" data-item="' + escapeHtml(item.name) + '">' +
                     '<div class="admin-catalog-title"><span>' + escapeHtml(item.label) + '</span><span>' + escapeHtml(size.w) + 'x' + escapeHtml(size.h) + '</span></div>' +
                     '<div class="inventory-small">' + escapeHtml(item.name) + ' | ' + escapeHtml(categoryLabels[item.category] || item.category) + ' | stack ' + escapeHtml(item.stack) + '</div>' +
                     (item.description ? '<div class="admin-catalog-desc">' + escapeHtml(item.description) + '</div>' : '') +
@@ -401,11 +459,15 @@
     function bindCatalog() {
         var definitions = getAllDefinitions();
         var byName = {};
-        definitions.forEach(function (item) { byName[item.name] = item; });
+        definitions.forEach(function (item) {
+            byName[item.name] = item;
+        });
 
         var search = document.getElementById('adminCatalogSearch');
         if (search) {
-            search.addEventListener('input', function () { renderModal(activePayload, true); });
+            search.addEventListener('input', function () {
+                renderModal(activePayload, true);
+            });
         }
 
         var tabs = modalBody.querySelectorAll('.catalog-tab');
@@ -436,9 +498,11 @@
 
             row.addEventListener('dragstart', function (event) {
                 var amount = 1;
+
                 if (!selectedCatalog || selectedCatalog.name !== item.name) {
                     selectedRotated = false;
                 }
+
                 if (event.ctrlKey) {
                     var asked = askAmount(item);
                     if (asked === null) {
@@ -447,14 +511,18 @@
                     }
                     amount = asked;
                 }
+
                 selectedCatalog = item;
                 selectedAmount = amount;
+
                 var payload = {
                     itemName: item.name,
                     amount: amount,
                     rotated: selectedRotated === true,
-                    item: item
+                    item: item,
+                    characterId: resolveCharacterId()
                 };
+
                 event.dataTransfer.setData('application/json', JSON.stringify(payload));
                 event.dataTransfer.setData('text/plain', JSON.stringify(payload));
             });
@@ -469,28 +537,32 @@
         var search = document.getElementById('adminCatalogSearch');
         if (keepSearch && search) oldSearch = search.value || '';
 
-        var character = activePayload.character || {};
+        activeCharacterId = resolveCharacterId();
+        if (!activeCharacterId) {
+            var character = activePayload.character || {};
+            var state = activePayload.state || {};
+            activeCharacterId = normalizeNumber(character.id || state.character_id || activePayload.characterId || activePayload.character_id);
+        }
+
+        var characterData = activePayload.character || {};
         var state = activePayload.state || {};
         var logs = activePayload.logs || [];
-        var title = characterName(character);
+        var title = characterName(characterData);
         var itemCount = (state.items || []).length;
 
+        modalBody.dataset.characterId = activeCharacterId || '';
         modalBody.innerHTML =
             '<div class="inventory-head">' +
-                '<div><h2>Инвентарь: ' + escapeHtml(title) + '</h2>' +
-                '<div class="inventory-small">Character ID: ' + escapeHtml(character.id || state.character_id || '-') +
-                ' | Account ID: ' + escapeHtml(character.account_id || '-') +
-                ' | Revision: ' + escapeHtml(state.revision || 0) +
-                ' | Предметов: ' + escapeHtml(itemCount) + '</div></div>' +
-                '<div class="inventory-head-actions">' +
-                    '<button id="inventoryRefreshBtn" type="button">Обновить</button>' +
-                    '<button id="inventoryCloseBtn" type="button">Закрыть</button>' +
+                '<div>' +
+                    '<h2>Инвентарь: ' + escapeHtml(title) + '</h2>' +
+                    '<div class="inventory-small">Character ID: ' + escapeHtml(activeCharacterId || '-') + ' | Account ID: ' + escapeHtml(characterData.account_id || '-') + ' | Revision: ' + escapeHtml(state.revision || 0) + ' | Предметов: ' + escapeHtml(itemCount) + '</div>' +
                 '</div>' +
+                '<div class="inventory-head-actions"><button id="inventoryRefreshBtn" type="button">Обновить</button><button id="inventoryCloseBtn" type="button">Закрыть</button></div>' +
             '</div>' +
             '<div class="inventory-main-grid">' +
                 '<div class="inventory-column"><div class="inventory-block"><h3>Экипировка</h3>' + renderEquipment(state) + '</div></div>' +
                 '<div class="inventory-column">' + renderContainers(state) + '<div class="inventory-block"><h3>Логи инвентаря</h3>' + renderLogs(logs) + '</div></div>' +
-                '<div class="inventory-column">' + renderCatalog(activePayload) + '</div>' +
+                '<div class="inventory-column">' + renderCatalog() + '</div>' +
             '</div>';
 
         var newSearch = document.getElementById('adminCatalogSearch');
@@ -498,7 +570,7 @@
 
         document.getElementById('inventoryCloseBtn').addEventListener('click', closeModal);
         document.getElementById('inventoryRefreshBtn').addEventListener('click', function () {
-            post('characterInventoryRefresh', { characterId: character.id || state.character_id });
+            post('characterInventoryRefresh', { characterId: resolveCharacterId() });
         });
 
         bindDropTargets();
@@ -513,6 +585,7 @@
         var cards = document.querySelectorAll('#characterList .character-card');
         Array.prototype.forEach.call(cards, function (card, index) {
             if (card.dataset.inventoryPatched === '1') return;
+
             var character = characters[index];
             if (!character || !character.id) return;
 
@@ -525,6 +598,7 @@
             btn.type = 'button';
             btn.textContent = 'Инвентарь';
             btn.addEventListener('click', function () {
+                activeCharacterId = Number(character.id);
                 post('characterInventoryOpen', { characterId: character.id });
             });
 
@@ -538,7 +612,9 @@
         window.renderCharacters = function (characters) {
             lastCharacters = characters || [];
             originalRenderCharacters(characters);
-            setTimeout(function () { decorateCharacterCards(lastCharacters); }, 0);
+            setTimeout(function () {
+                decorateCharacterCards(lastCharacters);
+            }, 0);
         };
     }
 
@@ -555,12 +631,16 @@
 
         if ((data.action === 'panel:open' || data.action === 'dashboard:set') && data.payload && data.payload.admin) {
             currentAdminRole = data.payload.admin.role || null;
-            setTimeout(function () { decorateCharacterCards(lastCharacters); }, 0);
+            setTimeout(function () {
+                decorateCharacterCards(lastCharacters);
+            }, 0);
         }
 
         if (data.action === 'characters:set') {
             lastCharacters = data.characters || [];
-            setTimeout(function () { decorateCharacterCards(lastCharacters); }, 30);
+            setTimeout(function () {
+                decorateCharacterCards(lastCharacters);
+            }, 30);
             return;
         }
 
