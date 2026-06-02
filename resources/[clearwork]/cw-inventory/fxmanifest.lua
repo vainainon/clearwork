@@ -4,7 +4,7 @@ rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aw
 
 author 'clearwork'
 description 'ClearWork Tarkov-style Inventory Core'
-version '0.1.2'
+version '0.2.0'
 
 ui_page 'html/index.html'
 
@@ -14,17 +14,14 @@ files {
     'html/app.js'
 }
 
-shared_scripts {
-    '@cw-items/shared/items.lua',
-    'shared/config.lua'
-}
-
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
+    'server/config.lua',
     'server/main.lua'
 }
 
 client_scripts {
+    'client/config.lua',
     'client/main.lua'
 }
 

@@ -4,12 +4,9 @@ rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aw
 
 author 'clearwork'
 description 'ClearWork item definitions registry'
-version '0.1.0'
-
-shared_scripts {
-    'shared/items.lua'
-}
+version '0.2.0'
 
 server_scripts {
+    'server/items.lua',
     'server/main.lua'
 }

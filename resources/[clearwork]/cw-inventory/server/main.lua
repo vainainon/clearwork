@@ -1,6 +1,48 @@
 local Config = CWInventoryConfig or {}
-local Items = CWItems or {}
 local Locks = {}
+
+-- cw-inventory не грузит shared-скрипты. Справочник предметов живёт отдельно в cw-items,
+-- а инвентарь получает данные только через server exports.
+local Items = {}
+
+local function safeItemExport(exportName, a, b, c)
+    local ok, result = pcall(function()
+        return exports['cw-items'][exportName](a, b, c)
+    end)
+
+    if not ok then
+        print(('[cw-inventory] cw-items export %s failed: %s'):format(tostring(exportName), tostring(result)))
+        return nil
+    end
+
+    return result
+end
+
+function Items.Get(name)
+    return safeItemExport('GetItem', name)
+end
+
+function Items.Exists(name)
+    return safeItemExport('ItemExists', name) == true
+end
+
+function Items.GetClientDefinitions()
+    return safeItemExport('GetClientDefinitions') or {}
+end
+
+function Items.GetSize(name, rotated)
+    local def = Items.Get(name)
+    if not def then return 1, 1 end
+
+    local w = tonumber(def.width) or 1
+    local h = tonumber(def.height) or 1
+
+    if rotated then
+        return h, w
+    end
+
+    return w, h
+end
 
 local function dbg(message, ...)
     if not Config.Debug then return end
