@@ -9,7 +9,7 @@
     var containersEl = document.getElementById('containers');
     var selectionInfo = document.getElementById('selectionInfo');
 
-    var APP_VERSION = 'v20-rotate-preview-self-container-ui';
+    var APP_VERSION = 'v21-rotate-visual-sync';
     var CELL = 48;
     var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {} };
     var selected = null;
@@ -93,10 +93,13 @@
 
     function visualSizeForItem(item, rotatedOverride) {
         var def = getDef(item || {});
-        var w = Number((item && (item.width || item.base_width || item.w)) || def.width || 1) || 1;
-        var h = Number((item && (item.height || item.base_height || item.h)) || def.height || 1) || 1;
+        // item.width/item.height уже приходят с сервера как текущий размер в сетке.
+        // Для drag-preview и R-поворота нужна базовая геометрия предмета,
+        // иначе повернутый предмет визуально переворачивается второй раз.
+        var w = Number((item && (item.base_width || item.base_w)) || def.width || (item && (item.width || item.w)) || 1) || 1;
+        var h = Number((item && (item.base_height || item.base_h)) || def.height || (item && (item.height || item.h)) || 1) || 1;
         var rotated = rotatedOverride;
-        if (rotated === undefined || rotated === null) rotated = !!(item && item.rotated);
+        if (rotated === undefined || rotated === null) rotated = !!(item && (item.rotated === true || item.rotated === 1));
         if (rotated) {
             var tmp = w;
             w = h;

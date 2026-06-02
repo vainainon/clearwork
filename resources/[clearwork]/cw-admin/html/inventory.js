@@ -2,7 +2,7 @@
     'use strict';
 
     var DEBUG = true;
-    var INVENTORY_JS_VERSION = 'v20-rotate-preview-self-container-ui';
+    var INVENTORY_JS_VERSION = 'v21-rotate-visual-sync';
     var CELL = 34;
 
     var lastCharacters = [];
@@ -827,12 +827,14 @@
             }
 
             rows.forEach(function (item) {
-                var itemW = Number(item.width || item.w || 1) || 1;
-                var itemH = Number(item.height || item.h || 1) || 1;
-                if (item.rotated === true || item.rotated === 1) {
-                    var tmp = itemW;
-                    itemW = itemH;
-                    itemH = tmp;
+                // item.width/item.height уже приходят с сервера в текущей ориентации.
+                // Не переворачиваем второй раз, иначе в админке отображение не совпадает с БД.
+                var itemW = Number(item.width || item.w || 0) || 0;
+                var itemH = Number(item.height || item.h || 0) || 0;
+                if (itemW < 1 || itemH < 1) {
+                    var currentVisual = visualSizeFromStateItem(item);
+                    itemW = currentVisual.w;
+                    itemH = currentVisual.h;
                 }
 
                 html += '' +
@@ -917,9 +919,18 @@
         return { w: Math.max(1, w), h: Math.max(1, h) };
     }
 
+    function getDefinitionByName(name) {
+        var definitions = (activePayload && activePayload.definitions) || (activeState && activeState.definitions) || {};
+        return definitions && name ? (definitions[name] || {}) : {};
+    }
+
     function visualSizeFromStateItem(item, rotatedOverride) {
-        var w = Number(item && (item.base_width || item.width || item.w) || 1) || 1;
-        var h = Number(item && (item.base_height || item.height || item.h) || 1) || 1;
+        var def = getDefinitionByName(item && (item.item_name || item.name));
+        // item.width/item.height уже рассчитаны сервером с учётом item.rotated.
+        // Для drag-preview и R-поворота считаем от base_width/base_height или cw-items definition,
+        // чтобы UI не показывал горизонтально то, что сервер реально кладёт вертикально.
+        var w = Number(item && (item.base_width || item.base_w) || def.width || (item && (item.width || item.w)) || 1) || 1;
+        var h = Number(item && (item.base_height || item.base_h) || def.height || (item && (item.height || item.h)) || 1) || 1;
         var rotated = rotatedOverride;
         if (rotated === undefined || rotated === null) rotated = item && (item.rotated === true || item.rotated === 1);
         if (rotated) {
