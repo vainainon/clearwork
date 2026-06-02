@@ -2,7 +2,7 @@
     'use strict';
 
     var DEBUG = true;
-    var INVENTORY_JS_VERSION = 'v19-drag-opacity-target-outline';
+    var INVENTORY_JS_VERSION = 'v20-rotate-preview-self-container-ui';
     var CELL = 34;
 
     var lastCharacters = [];
@@ -20,6 +20,7 @@
     var dragGhost = null;
     var dragOverElement = null;
     var dragPreviewElements = [];
+    var dragPreviewKey = '';
     var suppressNextCatalogClick = false;
     var inventoryDrag = null;
     var inventoryDragGhost = null;
@@ -487,6 +488,7 @@
             if (el && el.classList) el.classList.remove('drop-preview');
         });
         dragPreviewElements = [];
+        dragPreviewKey = '';
     }
 
     function collectPreviewCells(cell, size) {
@@ -509,9 +511,17 @@
 
     function setDragPreview(target, size) {
         var element = target && (target.cell || target.slot) ? (target.cell || target.slot) : null;
-        if (dragOverElement === element && dragPreviewElements.length) return;
+        size = size || { w: 1, h: 1 };
+        var key = 'none';
+        if (target && target.cell) {
+            key = 'cell:' + (target.cell.dataset.container || '') + ':' + (target.cell.dataset.x || '0') + ':' + (target.cell.dataset.y || '0') + ':' + size.w + 'x' + size.h;
+        } else if (target && target.slot) {
+            key = 'slot:' + (target.slot.dataset.slot || '');
+        }
+        if (dragOverElement === element && dragPreviewKey === key && dragPreviewElements.length) return;
 
         clearDragOverElement();
+        dragPreviewKey = key;
         dragOverElement = element || null;
 
         if (!dragOverElement || !dragOverElement.classList) return;
@@ -537,6 +547,8 @@
 
     function updateDragGhost(x, y) {
         if (!customDrag || !customDrag.dragging) return;
+        customDrag.lastX = x;
+        customDrag.lastY = y;
 
         if (!dragGhost) {
             dragGhost = document.createElement('div');
@@ -578,6 +590,8 @@
             sourceElement: closestElement(event.target, '.admin-catalog-item'),
             startX: event.clientX,
             startY: event.clientY,
+            lastX: event.clientX,
+            lastY: event.clientY,
             dragging: false
         };
     }
@@ -654,15 +668,20 @@
 
         inventoryDrag = {
             itemId: Number(item.id),
+            rotated: item.rotated === true || item.rotated === 1,
             sourceElement: closestElement(event.target, '.admin-grid-item, .admin-equip-item'),
             startX: event.clientX,
             startY: event.clientY,
+            lastX: event.clientX,
+            lastY: event.clientY,
             dragging: false
         };
     }
 
     function updateInventoryDragGhost(x, y) {
         if (!inventoryDrag || !inventoryDrag.dragging) return;
+        inventoryDrag.lastX = x;
+        inventoryDrag.lastY = y;
         var item = findStateItem(inventoryDrag.itemId);
         if (!item) return;
 
@@ -675,7 +694,7 @@
         fillDragGhost(
             inventoryDragGhost,
             itemLabel(item) + (Number(item.amount || 1) > 1 ? ' x' + item.amount : ''),
-            visualSizeFromStateItem(item),
+            visualSizeFromStateItem(item, inventoryDrag.rotated === true),
             CELL
         );
 
@@ -683,7 +702,7 @@
         inventoryDragGhost.style.top = (y + 12) + 'px';
 
         var target = getAdminDropTargetFromPoint(x, y);
-        setDragPreview(target, visualSizeFromStateItem(item));
+        setDragPreview(target, visualSizeFromStateItem(item, inventoryDrag.rotated === true));
     }
 
     function finishInventoryMouseDrag(event) {
@@ -722,7 +741,7 @@
                 container_id: target.cell.dataset.container,
                 x: Number(target.cell.dataset.x),
                 y: Number(target.cell.dataset.y),
-                rotated: (findStateItem(drag.itemId) || {}).rotated === true || (findStateItem(drag.itemId) || {}).rotated === 1
+                rotated: drag.rotated === true
             });
             return true;
         }
@@ -898,9 +917,16 @@
         return { w: Math.max(1, w), h: Math.max(1, h) };
     }
 
-    function visualSizeFromStateItem(item) {
-        var w = Number(item && (item.width || item.base_width || item.w) || 1) || 1;
-        var h = Number(item && (item.height || item.base_height || item.h) || 1) || 1;
+    function visualSizeFromStateItem(item, rotatedOverride) {
+        var w = Number(item && (item.base_width || item.width || item.w) || 1) || 1;
+        var h = Number(item && (item.base_height || item.height || item.h) || 1) || 1;
+        var rotated = rotatedOverride;
+        if (rotated === undefined || rotated === null) rotated = item && (item.rotated === true || item.rotated === 1);
+        if (rotated) {
+            var tmp = w;
+            w = h;
+            h = tmp;
+        }
         return { w: Math.max(1, w), h: Math.max(1, h) };
     }
 
@@ -1329,12 +1355,38 @@
     });
 
     document.addEventListener('keydown', function (event) {
-        if (!activePayload || !selectedCatalog) return;
-        if (event.key === 'r' || event.key === 'R' || event.key === 'к' || event.key === 'К') {
-            selectedRotated = !selectedRotated;
-            debug('rotate selected item', selectedCatalog.name, selectedRotated);
-            renderModal(activePayload, true);
+        if (!activePayload) return;
+        if (event.key !== 'r' && event.key !== 'R' && event.key !== 'к' && event.key !== 'К') return;
+
+        if (customDrag && customDrag.dragging) {
+            customDrag.rotated = !customDrag.rotated;
+            selectedCatalog = customDrag.item;
+            selectedRotated = customDrag.rotated === true;
+            clearDragOverElement();
+            if (typeof customDrag.lastX === 'number' && typeof customDrag.lastY === 'number') {
+                updateDragGhost(customDrag.lastX, customDrag.lastY);
+            }
+            debug('rotate catalog drag item', customDrag.item && customDrag.item.name, selectedRotated);
+            event.preventDefault();
+            return;
         }
+
+        if (inventoryDrag && inventoryDrag.dragging) {
+            inventoryDrag.rotated = !inventoryDrag.rotated;
+            selectedRotated = inventoryDrag.rotated === true;
+            clearDragOverElement();
+            if (typeof inventoryDrag.lastX === 'number' && typeof inventoryDrag.lastY === 'number') {
+                updateInventoryDragGhost(inventoryDrag.lastX, inventoryDrag.lastY);
+            }
+            debug('rotate inventory drag item', inventoryDrag.itemId, selectedRotated);
+            event.preventDefault();
+            return;
+        }
+
+        if (!selectedCatalog) return;
+        selectedRotated = !selectedRotated;
+        debug('rotate selected item', selectedCatalog.name, selectedRotated);
+        renderModal(activePayload, true);
     });
 
     window.addEventListener('message', function (event) {

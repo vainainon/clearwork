@@ -1,5 +1,5 @@
 local Config = CWInventoryConfig or {}
-local InventoryServerVersion = 'v17-move-delete-drop'
+local InventoryServerVersion = 'v20-self-container-guard'
 
 print(('[cw-inventory] loaded %s'):format(InventoryServerVersion))
 
@@ -419,6 +419,14 @@ local function canPlace(characterId, item, containerId, x, y, rotated, ignoreIte
     local _, containers = buildContainers(items)
     local container = containers[containerId]
     if not container then return false, 'Этот контейнер недоступен.' end
+
+    -- Нельзя убрать предмет в контейнер, который создан этим же предметом.
+    -- Пример бага: снять штаны и положить их в карманы этих же штанов, затем надеть другие штаны
+    -- и увидеть старые штаны внутри новых карманов. Любой контейнер одежды имеет source_item,
+    -- поэтому проверка работает не только для штанов, но и для разгрузки/пальто/будущих сумок.
+    if item and item.id and container.source_item and tonumber(container.source_item) == tonumber(item.id) then
+        return false, 'Нельзя положить предмет в его собственную вместимость.'
+    end
 
     local w, h = Items.GetSize(item.item_name, rotated)
     if x < 0 or y < 0 or x + w > container.width or y + h > container.height then

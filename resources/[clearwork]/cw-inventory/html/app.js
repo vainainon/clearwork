@@ -9,7 +9,7 @@
     var containersEl = document.getElementById('containers');
     var selectionInfo = document.getElementById('selectionInfo');
 
-    var APP_VERSION = 'v19-drag-opacity-target-outline';
+    var APP_VERSION = 'v20-rotate-preview-self-container-ui';
     var CELL = 48;
     var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {} };
     var selected = null;
@@ -18,6 +18,7 @@
     var dragGhost = null;
     var dragOverElement = null;
     var dragPreviewElements = [];
+    var dragPreviewKey = '';
     var suppressItemClick = false;
 
     function post(name, data) {
@@ -134,6 +135,7 @@
             if (el && el.classList) el.classList.remove('drop-preview');
         });
         dragPreviewElements = [];
+        dragPreviewKey = '';
     }
 
     function collectPreviewCells(cell, size) {
@@ -156,9 +158,17 @@
 
     function setDragPreview(target, size) {
         var element = target && (target.cell || target.slot) ? (target.cell || target.slot) : null;
-        if (dragOverElement === element && dragPreviewElements.length) return;
+        size = size || { w: 1, h: 1 };
+        var key = 'none';
+        if (target && target.cell) {
+            key = 'cell:' + (target.cell.dataset.container || '') + ':' + (target.cell.dataset.x || '0') + ':' + (target.cell.dataset.y || '0') + ':' + size.w + 'x' + size.h;
+        } else if (target && target.slot) {
+            key = 'slot:' + (target.slot.dataset.slot || '');
+        }
+        if (dragOverElement === element && dragPreviewKey === key && dragPreviewElements.length) return;
 
         clearDragOverElement();
+        dragPreviewKey = key;
         dragOverElement = element || null;
         if (!dragOverElement || !dragOverElement.classList) return;
         dragOverElement.classList.add('drag-over');
@@ -207,17 +217,23 @@
 
         customDrag = {
             itemId: Number(item.id),
+            rotated: item.rotated === true || item.rotated === 1,
             sourceElement: closestElement(event.target, '.grid-item, .equip-item'),
             startX: event.clientX,
             startY: event.clientY,
+            lastX: event.clientX,
+            lastY: event.clientY,
             dragging: false
         };
     }
 
     function updateItemDragGhost(x, y) {
         if (!customDrag || !customDrag.dragging) return;
+        customDrag.lastX = x;
+        customDrag.lastY = y;
         var item = findItem(customDrag.itemId);
         if (!item) return;
+        selectedRotated = customDrag.rotated === true;
 
         if (!dragGhost) {
             dragGhost = document.createElement('div');
@@ -266,7 +282,7 @@
                 containerId: target.cell.dataset.container,
                 x: Number(target.cell.dataset.x),
                 y: Number(target.cell.dataset.y),
-                rotated: selectedRotated
+                rotated: drag.rotated === true
             };
             if (item.equip_slot) post('unequipItem', payload);
             else post('moveItem', payload);
@@ -412,7 +428,8 @@
             var item = findItem(customDrag.itemId);
             if (item) {
                 selected = Number(item.id);
-                selectedRotated = !!item.rotated;
+                customDrag.rotated = item.rotated === true || item.rotated === 1;
+                selectedRotated = customDrag.rotated === true;
             }
         }
         if (customDrag.dragging) {
@@ -425,7 +442,20 @@
 
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') { post('close'); return; }
-        if ((e.key === 'r' || e.key === 'R' || e.key === 'к' || e.key === 'К') && selected) {
+        if (e.key !== 'r' && e.key !== 'R' && e.key !== 'к' && e.key !== 'К') return;
+
+        if (customDrag && customDrag.dragging) {
+            customDrag.rotated = !customDrag.rotated;
+            selectedRotated = customDrag.rotated === true;
+            clearDragOverElement();
+            if (typeof customDrag.lastX === 'number' && typeof customDrag.lastY === 'number') {
+                updateItemDragGhost(customDrag.lastX, customDrag.lastY);
+            }
+            e.preventDefault();
+            return;
+        }
+
+        if (selected) {
             selectedRotated = !selectedRotated;
             render();
         }
