@@ -1,4 +1,4 @@
-* { box-sizing: border-box; }
+* { box-sizing: border-box; } *:not(input):not(textarea) { user-select: none; -webkit-user-select: none; }
 html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; font-family: Georgia, serif; background: transparent; color: #d8d0bd; }
 .hidden { display: none !important; }
 #app { width: 100vw; height: 100vh; background: radial-gradient(circle at center, rgba(0,0,0,.25), rgba(0,0,0,.92)); display: flex; align-items: center; justify-content: center; }
@@ -21,10 +21,10 @@ button:hover { background: #343127; }
 .equip-slot { min-height: 86px; border: 1px solid #4e493c; background: rgba(255,255,255,.035); padding: 8px; position: relative; }
 .equip-slot:hover { outline: 1px solid #9a8f73; }
 .slot-title { color: #9a8f73; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }
-.equip-item, .grid-item { border: 1px solid #87795d; background: linear-gradient(180deg, rgba(84,78,62,.94), rgba(43,40,32,.96)); color: #f1dfaa; padding: 6px; cursor: pointer; overflow: hidden; user-select: none; }
-.equip-item.selected, .grid-item.selected { outline: 2px solid #d2b36f; box-shadow: 0 0 18px rgba(210,179,111,.25); }
-.item-name { font-size: 13px; font-weight: bold; line-height: 1.1; }
-.item-meta { position: absolute; right: 5px; bottom: 3px; font-size: 12px; color: #e6dbc0; opacity: .9; }
+.equip-item, .grid-item { border: 1px solid #87795d; background: linear-gradient(180deg, rgba(84,78,62,.94), rgba(43,40,32,.96)); color: #f1dfaa; padding: 4px; cursor: grab; overflow: hidden; user-select: none; text-align: center; }
+.equip-item:hover, .grid-item:hover { outline: 2px solid #d2b36f; box-shadow: 0 0 18px rgba(210,179,111,.25); }
+.item-name { font-size: 13px; font-weight: bold; line-height: 1.08; text-align: center; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; hyphens: auto; }
+.item-meta { position: absolute; right: 5px; bottom: 3px; font-size: 12px; color: #e6dbc0; opacity: .9; background: rgba(20,18,15,.45); padding: 0 2px; }
 .help-box { margin-top: 16px; border: 1px solid #4e493c; background: rgba(255,255,255,.035); color: #bfb59b; line-height: 1.45; padding: 12px; font-size: 13px; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 12px; }
 #selectionInfo { color: #bfb59b; font-size: 14px; text-align: right; }
@@ -34,7 +34,7 @@ button:hover { background: #343127; }
 .grid-wrap { position: relative; display: grid; gap: 0; background: #111; border: 1px solid #615947; width: max-content; }
 .cell { width: 48px; height: 48px; border-right: 1px solid #353127; border-bottom: 1px solid #353127; background: rgba(255,255,255,.025); }
 .cell:hover { background: rgba(210,179,111,.16); }
-.grid-item { position: absolute; z-index: 5; display: flex; flex-direction: column; justify-content: space-between; }
+.grid-item { position: absolute; z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .grid-item.weapon_revolver, .grid-item.weapon_longarm { background: linear-gradient(180deg, rgba(70,55,42,.98), rgba(32,25,20,.98)); }
 .grid-item.clothing_hat, .grid-item.clothing_coat, .grid-item.clothing_vest, .grid-item.clothing_pants, .grid-item.clothing_boots, .grid-item.clothing_shirt { background: linear-gradient(180deg, rgba(54,62,64,.96), rgba(26,33,35,.96)); }
 .empty-slot { color: #575143; font-size: 12px; font-style: italic; }
@@ -56,3 +56,10 @@ button:hover { background: #343127; }
 .quantity-help { font-size: 13px; color: #bfb59b; margin-bottom: 10px; }
 .quantity-input { width: 100%; padding: 10px; border: 1px solid #615947; background: #0f0e0c; color: #e6dbc0; font-family: Georgia, serif; font-size: 16px; }
 .quantity-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+
+
+/* v24: centered compact item labels */
+.grid-item .item-name { position: absolute; left: 3px; right: 3px; top: 3px; bottom: 14px; display: flex; align-items: center; justify-content: center; text-align: center; max-height: none; }
+.equip-item { position: relative; min-height: 26px; display: flex; align-items: center; justify-content: center; padding-right: 18px; }
+.equip-item .item-name { width: 100%; text-align: center; }
+.item-drag-ghost-label { text-align: center; }

@@ -9,7 +9,7 @@
     var containersEl = document.getElementById('containers');
     var selectionInfo = document.getElementById('selectionInfo');
 
-    var APP_VERSION = 'v22-stacks-drag-only';
+    var APP_VERSION = 'v24-centered-item-text';
     var CELL = 48;
     var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {} };
     var selected = null;
@@ -178,14 +178,17 @@
             '<div class="item-drag-ghost-label">' + escapeHtml(label) + '</div>';
     }
 
-    function updateSelectionInfo() {
-        var item = selectedItem();
+    function showItemInfo(item) {
         if (!item) {
             selectionInfo.textContent = 'Ничего не выбрано';
             return;
         }
-        var size = selectedSize(item);
-        selectionInfo.textContent = itemLabel(item) + (Number(item.amount || 1) > 1 ? ' x' + item.amount : '') + ' • ' + size.w + 'x' + size.h + (selectedRotated ? ' • повернут' : '');
+        var size = visualSizeForItem(item, item.rotated === true || item.rotated === 1);
+        selectionInfo.textContent = itemLabel(item) + (Number(item.amount || 1) > 1 ? ' x' + item.amount : '') + ' • ' + size.w + 'x' + size.h;
+    }
+
+    function updateSelectionInfo() {
+        showItemInfo(selectedItem());
     }
 
     function clearDragOverElement() {
@@ -279,29 +282,19 @@
         var itemAmount = Math.max(1, Math.floor(Number(item.amount || 1)));
         var moveAmount = itemAmount;
         var splitMode = false;
-
-        if (event.ctrlKey && itemAmount > 1) {
-            event.preventDefault();
-            event.stopPropagation();
-            openQuantityDialog('Количество для ' + itemLabel(item), itemAmount, itemAmount, function (amount) {
-                pendingMoveAmounts[Number(item.id)] = amount;
-                setNotice('Выбрано ' + amount + '. Теперь перетащи этот стак.', 'success');
-            });
-            return;
-        }
+        var ctrlMode = event.ctrlKey === true && itemAmount > 1;
 
         if (event.altKey && itemAmount > 1) {
             moveAmount = itemAmount - 1;
             splitMode = true;
-        } else if (pendingMoveAmounts[Number(item.id)]) {
-            moveAmount = clampAmount(pendingMoveAmounts[Number(item.id)], itemAmount);
-            delete pendingMoveAmounts[Number(item.id)];
+            ctrlMode = false;
         }
 
         customDrag = {
             itemId: Number(item.id),
             amount: moveAmount,
             split: splitMode,
+            ctrlAmount: ctrlMode,
             rotated: item.rotated === true || item.rotated === 1,
             sourceElement: closestElement(event.target, '.grid-item, .equip-item'),
             startX: event.clientX,
@@ -371,8 +364,16 @@
                 amount: drag.amount || item.amount || 1,
                 split: drag.split === true
             };
-            if (item.equip_slot) post('unequipItem', payload);
-            else post('moveItem', payload);
+            var sendMove = function (amount) {
+                payload.amount = clampAmount(amount || payload.amount, Math.max(1, Math.floor(Number(item.amount || 1))));
+                if (item.equip_slot) post('unequipItem', payload);
+                else post('moveItem', payload);
+            };
+            if ((drag.ctrlAmount === true || (event && event.ctrlKey === true)) && Number(item.amount || 1) > 1 && drag.split !== true) {
+                openQuantityDialog('Количество для ' + itemLabel(item), Number(item.amount || 1), Number(item.amount || 1), sendMove);
+            } else {
+                sendMove(payload.amount);
+            }
             return true;
         }
 
@@ -401,14 +402,15 @@
 
             if (item) {
                 var itemEl = document.createElement('div');
-                itemEl.className = 'equip-item ' + escapeHtml(item.type || '') + (selected === Number(item.id) ? ' selected' : '');
+                itemEl.className = 'equip-item ' + escapeHtml(item.type || '');
                 itemEl.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                     '<div class="item-meta"></div>';
                 itemEl.addEventListener('mousedown', function (e) { startItemMouseDrag(e, item); });
+                itemEl.addEventListener('mouseenter', function () { showItemInfo(item); });
+                itemEl.addEventListener('mouseleave', function () { if (!customDrag) showItemInfo(null); });
                 itemEl.addEventListener('click', function (e) {
                     e.stopPropagation();
-                    if (suppressItemClick) { suppressItemClick = false; return; }
-                    selectItem(item);
+                    if (suppressItemClick) suppressItemClick = false;
                 });
                 box.appendChild(itemEl);
             } else {
@@ -446,7 +448,7 @@
         (state.items || []).forEach(function (item) {
             if (item.container_id !== container.id || item.equip_slot) return;
             var el = document.createElement('div');
-            el.className = 'grid-item ' + escapeHtml(item.type || '') + (selected === Number(item.id) ? ' selected' : '');
+            el.className = 'grid-item ' + escapeHtml(item.type || '');
             el.style.left = (Number(item.x || 0) * CELL) + 'px';
             el.style.top = (Number(item.y || 0) * CELL) + 'px';
             el.style.width = (Number(item.width || 1) * CELL) + 'px';
@@ -455,10 +457,11 @@
             el.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                 '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) : '') + '</div>';
             el.addEventListener('mousedown', function (e) { startItemMouseDrag(e, item); });
+            el.addEventListener('mouseenter', function () { showItemInfo(item); });
+            el.addEventListener('mouseleave', function () { if (!customDrag) showItemInfo(null); });
             el.addEventListener('click', function (e) {
                 e.stopPropagation();
-                if (suppressItemClick) { suppressItemClick = false; return; }
-                selectItem(item);
+                if (suppressItemClick) suppressItemClick = false;
             });
             grid.appendChild(el);
         });
@@ -523,10 +526,6 @@
             return;
         }
 
-        if (selected) {
-            selectedRotated = !selectedRotated;
-            render();
-        }
     });
 
     if (window.console && console.log) console.log('[cw-inventory:nui] loaded ' + APP_VERSION);
@@ -537,7 +536,7 @@
         if (data.action === 'close') { app.classList.add('hidden'); destroyDragGhost(); customDrag = null; return; }
         if (data.action === 'state') {
             state = data.payload || state;
-            selected = selected && findItem(selected) ? selected : null;
+            selected = null;
             render();
             return;
         }
