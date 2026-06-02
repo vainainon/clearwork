@@ -1,5 +1,5 @@
 local InventoryClientDebug = true
-local InventoryClientVersion = 'v14-character-table-event'
+local InventoryClientVersion = 'v17-admin-move-delete'
 local unpackArgs = table.unpack or unpack
 
 print(('[cw-admin:inventory:client] loaded %s'):format(InventoryClientVersion))
@@ -104,6 +104,49 @@ end)
 -- Совместимость со старым JS-кэшем.
 RegisterNUICallback('characterInventoryAddItem', function(data, cb)
     handleAddItemNui(data, cb, 'legacy_callback')
+end)
+
+local function normalizeInventoryActionPayload(data)
+    data = type(data) == 'table' and data or {}
+    local characterId = resolveCharacterId(data)
+    local target = type(data.target) == 'table' and data.target or {}
+
+    if characterId then
+        data.characterId = characterId
+        data.character_id = characterId
+        target.characterId = characterId
+        target.character_id = characterId
+    end
+
+    data.target = target
+    data.itemId = data.itemId or data.item_id or data.id
+    data.reason = data.reason or 'cw-admin inventory panel'
+    return data, characterId
+end
+
+RegisterNUICallback('characterInventoryMoveItemV17', function(data, cb)
+    local payload, characterId = normalizeInventoryActionPayload(data)
+    dbg(
+        'NUI moveItem v17 payload=%s resolvedCharacterId=%s itemId=%s target=%s',
+        jsonDump(payload),
+        tostring(characterId),
+        tostring(payload.itemId),
+        jsonDump(payload.target)
+    )
+    TriggerServerEvent('cw-admin:server:inventory:moveItemV17', payload)
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('characterInventoryDeleteItemV17', function(data, cb)
+    local payload, characterId = normalizeInventoryActionPayload(data)
+    dbg(
+        'NUI deleteItem v17 payload=%s resolvedCharacterId=%s itemId=%s',
+        jsonDump(payload),
+        tostring(characterId),
+        tostring(payload.itemId)
+    )
+    TriggerServerEvent('cw-admin:server:inventory:deleteItemV17', payload)
+    cb({ ok = true })
 end)
 
 RegisterNUICallback('characterInventoryRefresh', function(data, cb)

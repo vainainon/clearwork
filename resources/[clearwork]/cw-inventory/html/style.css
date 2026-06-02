@@ -39,3 +39,4 @@ button:hover { background: #343127; }
 .grid-item.clothing_hat, .grid-item.clothing_coat, .grid-item.clothing_vest, .grid-item.clothing_pants, .grid-item.clothing_boots, .grid-item.clothing_shirt { background: linear-gradient(180deg, rgba(54,62,64,.96), rgba(26,33,35,.96)); }
 .empty-slot { color: #575143; font-size: 12px; font-style: italic; }
 @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } .inventory-shell { overflow: auto; } }
+.cell.drag-over, .equip-slot.drag-over { outline: 2px solid #d2b36f; outline-offset: -2px; }

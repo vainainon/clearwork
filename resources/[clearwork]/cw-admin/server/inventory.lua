@@ -1,5 +1,5 @@
 local InventoryDebug = true
-local InventoryIntegrationVersion = 'v15-export-self-call-fix'
+local InventoryIntegrationVersion = 'v17-admin-move-delete'
 local OpenedCharacterInventories = {}
 local unpackArgs = table.unpack or unpack
 
@@ -516,6 +516,147 @@ local function handleAddItemEvent(src, data, origin)
     sendInventoryPayload(src, characterId)
 end
 
+
+local function handleMoveItemEvent(src, data, origin)
+    data = type(data) == 'table' and data or {}
+    dbg('event moveItem %s src=%s raw=%s openedFallback=%s', tostring(origin or 'unknown'), tostring(src), safeJson(data), tostring(OpenedCharacterInventories[src]))
+
+    if not canUseCharacterInventory(src) then
+        sendInventoryError(src, 'Нет доступа к перемещению предметов.')
+        return
+    end
+
+    local characterId = resolveCharacterId(src, data)
+    local itemId = tonumber(data.itemId or data.item_id or data.id)
+    local target = normalizeTarget(data.target)
+    local reason = tostring(data.reason or 'cw-admin inventory panel move')
+
+    dbg('moveItem normalized src=%s characterId=%s itemId=%s target=%s reason=%s', tostring(src), tostring(characterId), tostring(itemId), safeJson(target), reason)
+
+    if not characterId then
+        sendInventoryError(src, 'Некорректный ID персонажа.')
+        return
+    end
+
+    if not itemId then
+        sendInventoryError(src, 'Некорректный ID предмета.')
+        return
+    end
+
+    if not target then
+        sendInventoryError(src, 'Некорректный слот/позиция.')
+        return
+    end
+
+    local character = getCharacterInfo(characterId)
+    if not character then
+        sendInventoryError(src, 'Персонаж не найден.')
+        return
+    end
+
+    local ok, result, err = callInventoryExport(
+        'MoveItemForCharacter',
+        characterId,
+        itemId,
+        target,
+        src,
+        getActorAccountId(src),
+        reason
+    )
+
+    dbg('moveItem export finished ok=%s result=%s err=%s', tostring(ok), tostring(result), tostring(err))
+
+    if not ok then
+        sendInventoryError(src, 'Ошибка экспорта инвентаря: ' .. tostring(result))
+        return
+    end
+
+    if result ~= true then
+        sendInventoryError(src, tostring(err or 'Предмет не перемещён.'))
+        return
+    end
+
+    OpenedCharacterInventories[src] = characterId
+
+    if CWAdmin.AdminLog then
+        CWAdmin.AdminLog(src, 'inventory_move_item', {
+            character_id = characterId,
+            item_id = itemId,
+            target = target,
+            reason = reason,
+        })
+    end
+
+    sendInventorySuccess(src, 'Предмет перемещён.')
+    sendInventoryPayload(src, characterId)
+end
+
+local function handleDeleteItemEvent(src, data, origin)
+    data = type(data) == 'table' and data or {}
+    dbg('event deleteItem %s src=%s raw=%s openedFallback=%s', tostring(origin or 'unknown'), tostring(src), safeJson(data), tostring(OpenedCharacterInventories[src]))
+
+    if not canUseCharacterInventory(src) then
+        sendInventoryError(src, 'Нет доступа к удалению предметов.')
+        return
+    end
+
+    local characterId = resolveCharacterId(src, data)
+    local itemId = tonumber(data.itemId or data.item_id or data.id)
+    local reason = tostring(data.reason or 'cw-admin inventory panel right click delete')
+
+    dbg('deleteItem normalized src=%s characterId=%s itemId=%s reason=%s', tostring(src), tostring(characterId), tostring(itemId), reason)
+
+    if not characterId then
+        sendInventoryError(src, 'Некорректный ID персонажа.')
+        return
+    end
+
+    if not itemId then
+        sendInventoryError(src, 'Некорректный ID предмета.')
+        return
+    end
+
+    local character = getCharacterInfo(characterId)
+    if not character then
+        sendInventoryError(src, 'Персонаж не найден.')
+        return
+    end
+
+    local ok, result, err = callInventoryExport(
+        'DeleteItemFromCharacter',
+        characterId,
+        itemId,
+        src,
+        getActorAccountId(src),
+        reason
+    )
+
+    dbg('deleteItem export finished ok=%s result=%s err=%s', tostring(ok), tostring(result), tostring(err))
+
+    if not ok then
+        sendInventoryError(src, 'Ошибка экспорта инвентаря: ' .. tostring(result))
+        return
+    end
+
+    if result ~= true then
+        sendInventoryError(src, tostring(err or 'Предмет не удалён.'))
+        return
+    end
+
+    OpenedCharacterInventories[src] = characterId
+
+    if CWAdmin.AdminLog then
+        CWAdmin.AdminLog(src, 'inventory_delete_item', {
+            character_id = characterId,
+            item_id = itemId,
+            reason = reason,
+        })
+    end
+
+    sendInventorySuccess(src, 'Предмет удалён.')
+    sendInventoryPayload(src, characterId)
+end
+
 -- v14: основной путь из NUI. Клиент передаёт одну нормализованную таблицу,
 -- чтобы не ловить рассыпание аргументов между NUI -> client -> server.
 RegisterNetEvent('cw-admin:server:inventory:addItemV14', function(data)
@@ -526,6 +667,15 @@ end)
 RegisterNetEvent('cw-admin:server:inventory:addItem', function(first, itemNameArg, amountArg, metadataArg, targetArg, reasonArg, rawArg)
     local data = normalizeAddItemArguments(first, itemNameArg, amountArg, metadataArg, targetArg, reasonArg, rawArg)
     handleAddItemEvent(source, data, 'legacy_compat')
+end)
+
+
+RegisterNetEvent('cw-admin:server:inventory:moveItemV17', function(data)
+    handleMoveItemEvent(source, data, 'v17_table')
+end)
+
+RegisterNetEvent('cw-admin:server:inventory:deleteItemV17', function(data)
+    handleDeleteItemEvent(source, data, 'v17_table')
 end)
 
 AddEventHandler('onResourceStart', function(resourceName)

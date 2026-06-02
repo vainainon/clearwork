@@ -1,4 +1,6 @@
 local Config = CWInventoryConfig or {}
+local InventoryClientVersion = 'v17-drag-drop-ground'
+print(('[cw-inventory:client] loaded %s'):format(InventoryClientVersion))
 local uiOpen = false
 local lastState = nil
 
@@ -66,6 +68,47 @@ RegisterNetEvent('cw-inventory:client:success', function(message)
     SendNUIMessage({ action = 'notice', kind = 'success', message = tostring(message or 'Готово.') })
 end)
 
+RegisterNetEvent('cw-inventory:client:spawnDropBag', function(data)
+    data = type(data) == 'table' and data or {}
+    local coords = data.coords
+    if type(coords) ~= 'table' then
+        local ped = PlayerPedId()
+        local c = GetEntityCoords(ped)
+        coords = { x = c.x, y = c.y, z = c.z }
+    end
+
+    local modelName = tostring(data.model or Config.DropBagModel or 'p_bag01x')
+    local hash = GetHashKey(modelName)
+
+    if not IsModelValid(hash) then
+        if Config.Debug then
+            print(('[cw-inventory] drop bag model is not valid: %s'):format(modelName))
+        end
+        return
+    end
+
+    RequestModel(hash)
+    local deadline = GetGameTimer() + 2500
+    while not HasModelLoaded(hash) and GetGameTimer() < deadline do
+        Wait(0)
+    end
+
+    if not HasModelLoaded(hash) then
+        if Config.Debug then
+            print(('[cw-inventory] drop bag model load timeout: %s'):format(modelName))
+        end
+        return
+    end
+
+    local obj = CreateObject(hash, tonumber(coords.x) or 0.0, tonumber(coords.y) or 0.0, tonumber(coords.z) or 0.0, false, false, false)
+    if obj and obj ~= 0 then
+        PlaceObjectOnGroundProperly(obj)
+        FreezeEntityPosition(obj, true)
+    end
+
+    SetModelAsNoLongerNeeded(hash)
+end)
+
 RegisterNUICallback('close', function(_, cb)
     setUI(false)
     cb({ ok = true })
@@ -88,6 +131,20 @@ end)
 
 RegisterNUICallback('unequipItem', function(data, cb)
     TriggerServerEvent('cw-inventory:server:unequipItem', data or {})
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('dropItem', function(data, cb)
+    data = type(data) == 'table' and data or {}
+    local ped = PlayerPedId()
+    local coords = GetEntityCoords(ped)
+    data.coords = {
+        x = coords.x,
+        y = coords.y,
+        z = coords.z,
+        heading = GetEntityHeading(ped)
+    }
+    TriggerServerEvent('cw-inventory:server:dropItem', data)
     cb({ ok = true })
 end)
 

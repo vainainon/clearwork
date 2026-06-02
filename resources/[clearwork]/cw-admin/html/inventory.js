@@ -2,7 +2,7 @@
     'use strict';
 
     var DEBUG = true;
-    var INVENTORY_JS_VERSION = 'v14-character-table-event';
+    var INVENTORY_JS_VERSION = 'v17-admin-move-delete';
     var CELL = 34;
 
     var lastCharacters = [];
@@ -20,6 +20,9 @@
     var dragGhost = null;
     var dragOverElement = null;
     var suppressNextCatalogClick = false;
+    var inventoryDrag = null;
+    var inventoryDragGhost = null;
+    var suppressNextInventoryClick = false;
 
     var categoryLabels = {
         all: 'Все',
@@ -218,11 +221,11 @@
             '.admin-equip-slot.drag-over, .admin-inv-cell.drag-over { outline: 2px solid #8b0000; outline-offset: -2px; }',
             '.slot-title { font-weight: 700; letter-spacing: .05em; text-transform: uppercase; font-size: 12px; }',
             '.empty-slot { font-size: 13px; opacity: .68; margin-top: 5px; font-style: italic; }',
-            '.admin-equip-item { margin-top: 5px; border: 1px solid rgba(59,33,15,.45); padding: 5px; background: rgba(59,33,15,.12); }',
+            '.admin-equip-item { margin-top: 5px; border: 1px solid rgba(59,33,15,.45); padding: 5px; background: rgba(59,33,15,.12); cursor: grab; user-select: none; }',
             '.admin-container-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }',
             '.admin-inv-grid { position: relative; display: grid; border: 1px solid rgba(59,33,15,.6); background: rgba(0,0,0,.05); width: max-content; }',
             '.admin-inv-cell { width: ' + CELL + 'px; height: ' + CELL + 'px; border-right: 1px solid rgba(59,33,15,.24); border-bottom: 1px solid rgba(59,33,15,.24); box-sizing: border-box; }',
-            '.admin-grid-item { position: absolute; box-sizing: border-box; border: 2px solid rgba(59,33,15,.8); background: rgba(59,33,15,.18); padding: 4px; overflow: hidden; pointer-events: none; }',
+            '.admin-grid-item { position: absolute; box-sizing: border-box; border: 2px solid rgba(59,33,15,.8); background: rgba(59,33,15,.18); padding: 4px; overflow: hidden; pointer-events: auto; cursor: grab; user-select: none; }',
             '.admin-grid-item .item-name { font-weight: 700; font-size: 12px; line-height: 1.1; }',
             '.admin-grid-item .item-meta { font-size: 11px; opacity: .8; margin-top: 3px; }',
             '.admin-catalog-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }',
@@ -232,7 +235,7 @@
             '.admin-catalog-item { border: 1px solid rgba(59,33,15,.6); background: rgba(241,223,170,.58); padding: 7px; cursor: grab; user-select: none; }',
             '.admin-catalog-item.selected { outline: 2px solid #8b0000; background: rgba(255,244,205,.92); }',
             '.admin-catalog-item:active { cursor: grabbing; }',
-            '.admin-catalog-drag-ghost { position: fixed; z-index: 999999; pointer-events: none; border: 2px solid rgba(59,33,15,.9); background: rgba(241,223,170,.96); color: #2b180c; padding: 7px 10px; min-width: 150px; box-shadow: 0 4px 12px rgba(0,0,0,.35); font-weight: 700; }',
+            '.admin-catalog-drag-ghost, .admin-inventory-drag-ghost { position: fixed; z-index: 999999; pointer-events: none; border: 2px solid rgba(59,33,15,.9); background: rgba(241,223,170,.96); color: #2b180c; padding: 7px 10px; min-width: 150px; box-shadow: 0 4px 12px rgba(0,0,0,.35); font-weight: 700; }',
             '.admin-catalog-title { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; }',
             '.admin-catalog-desc { margin-top: 4px; font-size: 12px; opacity: .78; }',
             '.admin-catalog-controls { display: grid; gap: 6px; margin-bottom: 8px; }',
@@ -272,6 +275,10 @@
         selectedCatalog = null;
         selectedAmount = 1;
         selectedRotated = false;
+        destroyDragGhost();
+        destroyInventoryDragGhost();
+        customDrag = null;
+        inventoryDrag = null;
     }
 
     function sortDefinitions(definitions) {
@@ -335,6 +342,55 @@
         post('characterInventoryAddItemV14', payload);
     }
 
+    function findStateItem(id) {
+        id = Number(id);
+        var items = activeState && activeState.items ? activeState.items : [];
+        for (var i = 0; i < items.length; i++) {
+            if (Number(items[i].id) === id) return items[i];
+        }
+        var equipment = activeState && activeState.equipment ? activeState.equipment : {};
+        var found = null;
+        Object.keys(equipment).forEach(function (slot) {
+            if (!found && equipment[slot] && Number(equipment[slot].id) === id) {
+                found = equipment[slot];
+            }
+        });
+        return found;
+    }
+
+    function postMoveItem(itemId, target) {
+        var characterId = resolveCharacterId();
+        target = target || {};
+        if (characterId) {
+            target.characterId = characterId;
+            target.character_id = characterId;
+        }
+
+        var payload = {
+            characterId: characterId,
+            character_id: characterId,
+            itemId: Number(itemId),
+            reason: 'cw-admin inventory panel move',
+            target: target
+        };
+
+        debug('move item payload', payload);
+        post('characterInventoryMoveItemV17', payload);
+    }
+
+    function postDeleteItem(itemId) {
+        var characterId = resolveCharacterId();
+        var payload = {
+            characterId: characterId,
+            character_id: characterId,
+            itemId: Number(itemId),
+            reason: 'cw-admin inventory panel right click delete'
+        };
+
+        debug('delete item payload', payload);
+        post('characterInventoryDeleteItemV17', payload);
+    }
+
     function parseDragData(event) {
         try {
             var raw = event.dataTransfer.getData('application/json') || event.dataTransfer.getData('text/plain');
@@ -362,6 +418,28 @@
             element = element.parentNode;
         }
         return null;
+    }
+
+    function getAdminCellFromPoint(x, y) {
+        var under = document.elementFromPoint(x, y);
+        var cell = closestElement(under, '.admin-inv-cell');
+        if (cell) return cell;
+
+        var grid = closestElement(under, '.admin-inv-grid');
+        if (!grid) return null;
+
+        var rect = grid.getBoundingClientRect();
+        var cx = Math.floor((x - rect.left) / CELL);
+        var cy = Math.floor((y - rect.top) / CELL);
+        if (cx < 0 || cy < 0) return null;
+        return grid.querySelector('.admin-inv-cell[data-x="' + cx + '"][data-y="' + cy + '"]');
+    }
+
+    function getAdminDropTargetFromPoint(x, y) {
+        var under = document.elementFromPoint(x, y);
+        var slot = closestElement(under, '.admin-equip-slot');
+        var cell = getAdminCellFromPoint(x, y);
+        return { cell: cell, slot: slot, under: under };
     }
 
     function clearDragOverElement() {
@@ -401,10 +479,8 @@
         dragGhost.style.left = (x + 12) + 'px';
         dragGhost.style.top = (y + 12) + 'px';
 
-        var under = document.elementFromPoint(x, y);
-        var cell = closestElement(under, '.admin-inv-cell');
-        var slot = closestElement(under, '.admin-equip-slot');
-        setDragOverElement(cell || slot || null);
+        var target = getAdminDropTargetFromPoint(x, y);
+        setDragOverElement(target.cell || target.slot || null);
     }
 
     function startCatalogMouseDrag(event, item) {
@@ -451,9 +527,9 @@
 
         var x = event && typeof event.clientX === 'number' ? event.clientX : drag.startX;
         var y = event && typeof event.clientY === 'number' ? event.clientY : drag.startY;
-        var under = document.elementFromPoint(x, y);
-        var cell = closestElement(under, '.admin-inv-cell');
-        var slot = closestElement(under, '.admin-equip-slot');
+        var target = getAdminDropTargetFromPoint(x, y);
+        var cell = target.cell;
+        var slot = target.slot;
 
         debug('custom drag finish', {
             itemName: drag.item && drag.item.name,
@@ -461,7 +537,7 @@
             rotated: drag.rotated,
             hasCell: !!cell,
             hasSlot: !!slot,
-            underClass: under && under.className
+            underClass: target.under && target.under.className
         });
 
         destroyDragGhost();
@@ -484,6 +560,93 @@
         }
 
         debug('custom drag cancelled: no valid target');
+        return true;
+    }
+
+    function destroyInventoryDragGhost() {
+        if (inventoryDragGhost && inventoryDragGhost.parentNode) {
+            inventoryDragGhost.parentNode.removeChild(inventoryDragGhost);
+        }
+        inventoryDragGhost = null;
+        clearDragOverElement();
+    }
+
+    function startInventoryMouseDrag(event, item) {
+        if (!event || event.button !== 0) return;
+        if (closestElement(event.target, 'input, textarea, select, button')) return;
+
+        inventoryDrag = {
+            itemId: Number(item.id),
+            startX: event.clientX,
+            startY: event.clientY,
+            dragging: false
+        };
+    }
+
+    function updateInventoryDragGhost(x, y) {
+        if (!inventoryDrag || !inventoryDrag.dragging) return;
+        var item = findStateItem(inventoryDrag.itemId);
+        if (!item) return;
+
+        if (!inventoryDragGhost) {
+            inventoryDragGhost = document.createElement('div');
+            inventoryDragGhost.className = 'admin-inventory-drag-ghost';
+            inventoryDragGhost.textContent = itemLabel(item) + (Number(item.amount || 1) > 1 ? ' x' + item.amount : '');
+            document.body.appendChild(inventoryDragGhost);
+        }
+
+        inventoryDragGhost.style.left = (x + 12) + 'px';
+        inventoryDragGhost.style.top = (y + 12) + 'px';
+
+        var target = getAdminDropTargetFromPoint(x, y);
+        setDragOverElement(target.cell || target.slot || null);
+    }
+
+    function finishInventoryMouseDrag(event) {
+        if (!inventoryDrag) return false;
+
+        var drag = inventoryDrag;
+        inventoryDrag = null;
+
+        if (!drag.dragging) {
+            destroyInventoryDragGhost();
+            return false;
+        }
+
+        if (event && event.preventDefault) event.preventDefault();
+        if (event && event.stopPropagation) event.stopPropagation();
+        suppressNextInventoryClick = true;
+
+        var x = event && typeof event.clientX === 'number' ? event.clientX : drag.startX;
+        var y = event && typeof event.clientY === 'number' ? event.clientY : drag.startY;
+        var target = getAdminDropTargetFromPoint(x, y);
+
+        debug('inventory drag finish', {
+            itemId: drag.itemId,
+            hasCell: !!target.cell,
+            hasSlot: !!target.slot,
+            underClass: target.under && target.under.className
+        });
+
+        destroyInventoryDragGhost();
+
+        if (target.cell) {
+            postMoveItem(drag.itemId, {
+                type: 'container',
+                containerId: target.cell.dataset.container,
+                container_id: target.cell.dataset.container,
+                x: Number(target.cell.dataset.x),
+                y: Number(target.cell.dataset.y),
+                rotated: false
+            });
+            return true;
+        }
+
+        if (target.slot) {
+            postMoveItem(drag.itemId, { type: 'slot', slot: target.slot.dataset.slot });
+            return true;
+        }
+
         return true;
     }
 
@@ -523,7 +686,7 @@
                 '<div class="admin-equip-slot" data-slot="' + escapeHtml(slotId) + '">' +
                     '<div class="slot-title">' + escapeHtml(slot.label || slotId) + '</div>' +
                     (item
-                        ? '<div class="admin-equip-item"><b>' + escapeHtml(itemLabel(item)) + '</b><br>#' + escapeHtml(item.id) + ' | ' + escapeHtml(item.item_name) + '</div>'
+                        ? '<div class="admin-equip-item" data-item-id="' + escapeHtml(item.id) + '"><b>' + escapeHtml(itemLabel(item)) + '</b><br>#' + escapeHtml(item.id) + ' | ' + escapeHtml(item.item_name) + '</div>'
                         : '<div class="empty-slot">пусто</div>') +
                 '</div>';
         }).join('') + '</div>';
@@ -569,7 +732,7 @@
                 }
 
                 html += '' +
-                    '<div class="admin-grid-item" style="left:' + ((Number(item.x) || 0) * CELL) + 'px; top:' + ((Number(item.y) || 0) * CELL) + 'px; width:' + (itemW * CELL) + 'px; height:' + (itemH * CELL) + 'px;">' +
+                    '<div class="admin-grid-item" data-item-id="' + escapeHtml(item.id) + '" data-container="' + escapeHtml(container.id) + '" style="left:' + ((Number(item.x) || 0) * CELL) + 'px; top:' + ((Number(item.y) || 0) * CELL) + 'px; width:' + (itemW * CELL) + 'px; height:' + (itemH * CELL) + 'px;">' +
                         '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                         '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) + ' ' : '') + '#' + escapeHtml(item.id) + '</div>' +
                     '</div>';
@@ -693,6 +856,32 @@
             slot.addEventListener('click', function () {
                 if (!selectedCatalog) return;
                 postAddItem({ type: 'slot', slot: slot.dataset.slot });
+            });
+        });
+    }
+
+    function bindInventoryItems() {
+        var rows = modalBody.querySelectorAll('.admin-grid-item, .admin-equip-item');
+        Array.prototype.forEach.call(rows, function (row) {
+            var item = findStateItem(row.dataset.itemId);
+            if (!item) return;
+
+            row.addEventListener('mousedown', function (event) {
+                startInventoryMouseDrag(event, item);
+            });
+
+            row.addEventListener('click', function (event) {
+                if (suppressNextInventoryClick) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    suppressNextInventoryClick = false;
+                }
+            });
+
+            row.addEventListener('contextmenu', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                postDeleteItem(item.id);
             });
         });
     }
@@ -859,6 +1048,7 @@
         });
 
         bindDropTargets();
+        bindInventoryItems();
         bindCatalog();
         modal.classList.remove('hidden');
     }
@@ -916,6 +1106,22 @@
     });
 
     document.addEventListener('mousemove', function (event) {
+        if (inventoryDrag) {
+            var idx = Math.abs((event.clientX || 0) - inventoryDrag.startX);
+            var idy = Math.abs((event.clientY || 0) - inventoryDrag.startY);
+
+            if (!inventoryDrag.dragging && (idx > 4 || idy > 4)) {
+                inventoryDrag.dragging = true;
+                debug('inventory drag start', { itemId: inventoryDrag.itemId });
+            }
+
+            if (inventoryDrag.dragging) {
+                event.preventDefault();
+                updateInventoryDragGhost(event.clientX, event.clientY);
+                return;
+            }
+        }
+
         if (!customDrag) return;
 
         var dx = Math.abs((event.clientX || 0) - customDrag.startX);
@@ -940,6 +1146,7 @@
     });
 
     document.addEventListener('mouseup', function (event) {
+        if (finishInventoryMouseDrag(event)) return;
         finishCatalogMouseDrag(event);
     });
 

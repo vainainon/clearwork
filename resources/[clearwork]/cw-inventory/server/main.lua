@@ -1,5 +1,5 @@
 local Config = CWInventoryConfig or {}
-local InventoryServerVersion = 'v16-cw-items-export-self-fix'
+local InventoryServerVersion = 'v17-move-delete-drop'
 
 print(('[cw-inventory] loaded %s'):format(InventoryServerVersion))
 
@@ -800,6 +800,120 @@ local function addItemToCharacterAt(characterId, itemName, amount, metadata, tar
     end)
 end
 
+local function moveItemForCharacter(characterId, itemId, target, actorAccountId, actorSource, reason)
+    characterId = tonumber(characterId)
+    itemId = tonumber(itemId)
+    target = type(target) == 'table' and target or {}
+
+    if not characterId then return false, 'Некорректный ID персонажа.' end
+    if not itemId then return false, 'Некорректный ID предмета.' end
+    if not characterExists(characterId) then return false, 'Персонаж не найден.' end
+
+    ensureState(characterId)
+
+    return withLock(characterId, function()
+        local item = getItem(characterId, itemId)
+        if not item then return false, 'Предмет не найден.' end
+
+        local targetType = tostring(target.type or '')
+        local slot = tostring(target.slot or target.equip_slot or '')
+        local containerId = tostring(target.containerId or target.container_id or '')
+        local x = tonumber(target.x)
+        local y = tonumber(target.y)
+        local rotated = target.rotated == true or target.rotated == 1 or target.rotated == '1'
+        local before = copy(item)
+
+        if targetType == 'slot' or slot ~= '' then
+            if slot == '' then return false, 'Некорректный слот экипировки.' end
+            if not canEquipToSlot(item, slot) then return false, 'Этот предмет нельзя положить в этот слот.' end
+
+            local occupied = MySQL.scalar.await('SELECT id FROM cw_inventory_items WHERE character_id = ? AND equip_slot = ? LIMIT 1', { characterId, slot })
+            if occupied and tonumber(occupied) ~= item.id then
+                return false, 'Слот уже занят.'
+            end
+
+            MySQL.update.await([[UPDATE cw_inventory_items
+                SET container_id = NULL, x = NULL, y = NULL, rotated = 0, equip_slot = ?
+                WHERE id = ? AND character_id = ?]], { slot, item.id, characterId })
+
+            bumpRevision(characterId)
+            local after = getItem(characterId, item.id)
+            logAction(characterId, actorAccountId, 'admin_move_equip', {
+                actor_source = actorSource,
+                item_id = item.id,
+                item_name = item.item_name,
+                amount = item.amount,
+                from_container = before.container_id,
+                from_slot = before.equip_slot,
+                to_slot = slot,
+                before_json = before,
+                after_json = after
+            })
+            return true
+        end
+
+        if containerId == '' or x == nil or y == nil then
+            return false, 'Некорректная позиция.'
+        end
+
+        local ok, msg = canPlace(characterId, item, containerId, x, y, rotated, item.id)
+        if not ok then return false, msg end
+
+        MySQL.update.await([[UPDATE cw_inventory_items
+            SET container_id = ?, x = ?, y = ?, rotated = ?, equip_slot = NULL
+            WHERE id = ? AND character_id = ?]],
+            { containerId, math.floor(x), math.floor(y), rotated and 1 or 0, item.id, characterId })
+
+        bumpRevision(characterId)
+        local after = getItem(characterId, item.id)
+        logAction(characterId, actorAccountId, item.equip_slot and 'admin_unequip_move' or 'admin_move', {
+            actor_source = actorSource,
+            item_id = item.id,
+            item_name = item.item_name,
+            amount = item.amount,
+            from_container = before.container_id,
+            to_container = containerId,
+            from_slot = before.equip_slot,
+            before_json = before,
+            after_json = after
+        })
+        return true
+    end)
+end
+
+local function deleteItemFromCharacter(characterId, itemId, actorAccountId, actorSource, reason, action)
+    characterId = tonumber(characterId)
+    itemId = tonumber(itemId)
+
+    if not characterId then return false, 'Некорректный ID персонажа.' end
+    if not itemId then return false, 'Некорректный ID предмета.' end
+    if not characterExists(characterId) then return false, 'Персонаж не найден.' end
+
+    ensureState(characterId)
+
+    return withLock(characterId, function()
+        local item = getItem(characterId, itemId)
+        if not item then return false, 'Предмет не найден.' end
+
+        local before = copy(item)
+        MySQL.update.await('DELETE FROM cw_inventory_items WHERE id = ? AND character_id = ?', { item.id, characterId })
+        bumpRevision(characterId)
+
+        logAction(characterId, actorAccountId, action or 'admin_delete', {
+            actor_source = actorSource,
+            item_id = item.id,
+            item_name = item.item_name,
+            amount = item.amount,
+            from_container = before.container_id,
+            from_slot = before.equip_slot,
+            before_json = before,
+            after_json = { deleted = true, reason = reason or 'delete' }
+        })
+
+        return true, item
+    end)
+end
+
 local function openInventoryForSource(src, reason)
     src = tonumber(src) or 0
     if src <= 0 then return end
@@ -848,6 +962,36 @@ RegisterNetEvent('cw-inventory:server:unequipItem', function(payload)
     sendState(src)
 end)
 
+RegisterNetEvent('cw-inventory:server:dropItem', function(payload)
+    local src = source
+    payload = type(payload) == 'table' and payload or {}
+
+    local player, characterId, err = getCharacter(src)
+    if err then
+        TriggerClientEvent('cw-inventory:client:error', src, err)
+        return
+    end
+
+    local itemId = tonumber(payload.itemId)
+    local coords = type(payload.coords) == 'table' and payload.coords or {}
+    local reason = 'player drop to ground'
+    local ok, resultOrMsg = deleteItemFromCharacter(characterId, itemId, player and player.account_id or nil, src, reason, 'drop_ground')
+
+    if not ok then
+        TriggerClientEvent('cw-inventory:client:error', src, resultOrMsg or 'Не удалось выбросить предмет.')
+        sendState(src)
+        return
+    end
+
+    TriggerClientEvent('cw-inventory:client:success', src, 'Предмет выброшен.')
+    TriggerClientEvent('cw-inventory:client:spawnDropBag', src, {
+        item = resultOrMsg,
+        coords = coords,
+        model = Config.DropBagModel or 'p_bag01x'
+    })
+    sendState(src)
+end)
+
 exports('GetInventoryState', function(characterId)
     characterId = tonumber(characterId)
     if not characterId then
@@ -876,6 +1020,17 @@ end)
 exports('AddItemToCharacterAt', function(characterId, itemName, amount, metadata, target, actorSource, actorAccountId, reason)
     -- Только server-side API для доверенных ресурсов. Права здесь не проверяются специально.
     return addItemToCharacterAt(tonumber(characterId), itemName, amount, metadata or {}, target or {}, actorAccountId, actorSource, reason or 'resource_export')
+end)
+
+
+exports('MoveItemForCharacter', function(characterId, itemId, target, actorSource, actorAccountId, reason)
+    -- Только server-side API для доверенных ресурсов. Права здесь не проверяются специально.
+    return moveItemForCharacter(tonumber(characterId), tonumber(itemId), target or {}, actorAccountId, actorSource, reason or 'resource_export')
+end)
+
+exports('DeleteItemFromCharacter', function(characterId, itemId, actorSource, actorAccountId, reason)
+    -- Только server-side API для доверенных ресурсов. Права здесь не проверяются специально.
+    return deleteItemFromCharacter(tonumber(characterId), tonumber(itemId), actorAccountId, actorSource, reason or 'resource_export', 'admin_delete')
 end)
 
 exports('GetItemDefinitions', function()

@@ -1,4 +1,6 @@
 (function () {
+    'use strict';
+
     var app = document.getElementById('app');
     var closeBtn = document.getElementById('closeBtn');
     var refreshBtn = document.getElementById('refreshBtn');
@@ -8,15 +10,13 @@
     var selectionInfo = document.getElementById('selectionInfo');
 
     var CELL = 48;
-    var state = {
-        items: [],
-        equipment: {},
-        containers: [],
-        equipmentSlots: [],
-        definitions: {}
-    };
+    var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {} };
     var selected = null;
     var selectedRotated = false;
+    var customDrag = null;
+    var dragGhost = null;
+    var dragOverElement = null;
+    var suppressItemClick = false;
 
     function post(name, data) {
         return fetch('https://' + GetParentResourceName() + '/' + name, {
@@ -39,10 +39,16 @@
         notice.textContent = message || '';
         notice.className = kind || '';
         if (message) {
-            setTimeout(function () {
-                if (notice.textContent === message) setNotice('');
-            }, 3500);
+            setTimeout(function () { if (notice.textContent === message) setNotice(''); }, 3500);
         }
+    }
+
+    function closestElement(element, selector) {
+        while (element && element !== document) {
+            if (element.matches && element.matches(selector)) return element;
+            element = element.parentNode;
+        }
+        return null;
     }
 
     function getDef(item) {
@@ -92,6 +98,136 @@
         selectionInfo.textContent = itemLabel(item) + ' • ' + size.w + 'x' + size.h + (selectedRotated ? ' • повернут' : '');
     }
 
+    function clearDragOverElement() {
+        if (dragOverElement && dragOverElement.classList) dragOverElement.classList.remove('drag-over');
+        dragOverElement = null;
+    }
+
+    function setDragOverElement(element) {
+        if (dragOverElement === element) return;
+        clearDragOverElement();
+        dragOverElement = element || null;
+        if (dragOverElement && dragOverElement.classList) dragOverElement.classList.add('drag-over');
+    }
+
+    function destroyDragGhost() {
+        if (dragGhost && dragGhost.parentNode) dragGhost.parentNode.removeChild(dragGhost);
+        dragGhost = null;
+        clearDragOverElement();
+    }
+
+    function getCellFromPoint(x, y) {
+        var under = document.elementFromPoint(x, y);
+        var cell = closestElement(under, '.cell');
+        if (cell) return cell;
+
+        var grid = closestElement(under, '.grid-wrap');
+        if (!grid) return null;
+
+        var rect = grid.getBoundingClientRect();
+        var cx = Math.floor((x - rect.left) / CELL);
+        var cy = Math.floor((y - rect.top) / CELL);
+        if (cx < 0 || cy < 0) return null;
+        return grid.querySelector('.cell[data-x="' + cx + '"][data-y="' + cy + '"]');
+    }
+
+    function getDropTargetFromPoint(x, y) {
+        var under = document.elementFromPoint(x, y);
+        var slot = closestElement(under, '.equip-slot');
+        var cell = getCellFromPoint(x, y);
+        return { cell: cell, slot: slot };
+    }
+
+    function startItemMouseDrag(event, item) {
+        if (!event || event.button !== 0) return;
+        if (closestElement(event.target, 'input, textarea, select, button')) return;
+
+        customDrag = {
+            itemId: Number(item.id),
+            startX: event.clientX,
+            startY: event.clientY,
+            dragging: false
+        };
+    }
+
+    function updateItemDragGhost(x, y) {
+        if (!customDrag || !customDrag.dragging) return;
+        var item = findItem(customDrag.itemId);
+        if (!item) return;
+
+        if (!dragGhost) {
+            dragGhost = document.createElement('div');
+            dragGhost.style.position = 'fixed';
+            dragGhost.style.zIndex = '999999';
+            dragGhost.style.pointerEvents = 'none';
+            dragGhost.style.border = '1px solid #87795d';
+            dragGhost.style.background = 'rgba(43,40,32,.96)';
+            dragGhost.style.color = '#f1dfaa';
+            dragGhost.style.padding = '7px 10px';
+            dragGhost.style.minWidth = '150px';
+            dragGhost.style.boxShadow = '0 4px 12px rgba(0,0,0,.35)';
+            dragGhost.textContent = itemLabel(item) + (Number(item.amount || 1) > 1 ? ' x' + item.amount : '');
+            document.body.appendChild(dragGhost);
+        }
+
+        dragGhost.style.left = (x + 12) + 'px';
+        dragGhost.style.top = (y + 12) + 'px';
+
+        var target = getDropTargetFromPoint(x, y);
+        setDragOverElement(target.cell || target.slot || null);
+    }
+
+    function finishItemMouseDrag(event) {
+        if (!customDrag) return false;
+
+        var drag = customDrag;
+        customDrag = null;
+
+        if (!drag.dragging) {
+            destroyDragGhost();
+            return false;
+        }
+
+        if (event && event.preventDefault) event.preventDefault();
+        if (event && event.stopPropagation) event.stopPropagation();
+        suppressItemClick = true;
+
+        var item = findItem(drag.itemId);
+        var x = event && typeof event.clientX === 'number' ? event.clientX : drag.startX;
+        var y = event && typeof event.clientY === 'number' ? event.clientY : drag.startY;
+        var target = getDropTargetFromPoint(x, y);
+        var shell = closestElement(document.elementFromPoint(x, y), '.inventory-shell');
+
+        destroyDragGhost();
+
+        if (!item) return true;
+
+        if (target.cell) {
+            var payload = {
+                itemId: item.id,
+                containerId: target.cell.dataset.container,
+                x: Number(target.cell.dataset.x),
+                y: Number(target.cell.dataset.y),
+                rotated: selectedRotated
+            };
+            if (item.equip_slot) post('unequipItem', payload);
+            else post('moveItem', payload);
+            return true;
+        }
+
+        if (target.slot) {
+            post('equipItem', { itemId: item.id, slot: target.slot.dataset.slot });
+            return true;
+        }
+
+        if (!shell) {
+            post('dropItem', { itemId: item.id });
+            return true;
+        }
+
+        return true;
+    }
+
     function renderEquipment() {
         equipmentEl.innerHTML = '';
         (state.equipmentSlots || []).forEach(function (slot) {
@@ -107,8 +243,10 @@
                 itemEl.className = 'equip-item ' + escapeHtml(item.type || '') + (selected === Number(item.id) ? ' selected' : '');
                 itemEl.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                     '<div class="item-meta">#' + escapeHtml(item.id) + '</div>';
+                itemEl.addEventListener('mousedown', function (e) { startItemMouseDrag(e, item); });
                 itemEl.addEventListener('click', function (e) {
                     e.stopPropagation();
+                    if (suppressItemClick) { suppressItemClick = false; return; }
                     selectItem(item);
                 });
                 box.appendChild(itemEl);
@@ -119,7 +257,6 @@
             box.addEventListener('click', function () {
                 var item = selectedItem();
                 if (!item) return;
-                if (item.equip_slot) return;
                 post('equipItem', { itemId: item.id, slot: slot.id });
             });
 
@@ -140,13 +277,13 @@
         grid.style.width = (container.width * CELL) + 'px';
         grid.style.height = (container.height * CELL) + 'px';
 
-        for (var y = 0; y < container.height; y++) {
-            for (var x = 0; x < container.width; x++) {
+        for (var yy = 0; yy < container.height; yy++) {
+            for (var xx = 0; xx < container.width; xx++) {
                 var cell = document.createElement('div');
                 cell.className = 'cell';
                 cell.dataset.container = container.id;
-                cell.dataset.x = x;
-                cell.dataset.y = y;
+                cell.dataset.x = xx;
+                cell.dataset.y = yy;
                 cell.addEventListener('click', function (e) {
                     var item = selectedItem();
                     if (!item) return;
@@ -175,8 +312,10 @@
             el.title = itemLabel(item) + '\n' + (item.description || '');
             el.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                 '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) + ' ' : '') + '#' + escapeHtml(item.id) + '</div>';
+            el.addEventListener('mousedown', function (e) { startItemMouseDrag(e, item); });
             el.addEventListener('click', function (e) {
                 e.stopPropagation();
+                if (suppressItemClick) { suppressItemClick = false; return; }
                 selectItem(item);
             });
             grid.appendChild(el);
@@ -188,9 +327,7 @@
 
     function renderContainers() {
         containersEl.innerHTML = '';
-        (state.containers || []).forEach(function (container) {
-            containersEl.appendChild(renderContainer(container));
-        });
+        (state.containers || []).forEach(function (container) { containersEl.appendChild(renderContainer(container)); });
     }
 
     function render() {
@@ -207,11 +344,28 @@
         selectItem(null);
     });
 
-    document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') {
-            post('close');
-            return;
+    document.addEventListener('mousemove', function (event) {
+        if (!customDrag) return;
+        var dx = Math.abs((event.clientX || 0) - customDrag.startX);
+        var dy = Math.abs((event.clientY || 0) - customDrag.startY);
+        if (!customDrag.dragging && (dx > 4 || dy > 4)) {
+            customDrag.dragging = true;
+            var item = findItem(customDrag.itemId);
+            if (item) {
+                selected = Number(item.id);
+                selectedRotated = !!item.rotated;
+            }
         }
+        if (customDrag.dragging) {
+            event.preventDefault();
+            updateItemDragGhost(event.clientX, event.clientY);
+        }
+    });
+
+    document.addEventListener('mouseup', function (event) { finishItemMouseDrag(event); });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { post('close'); return; }
         if ((e.key === 'r' || e.key === 'R' || e.key === 'к' || e.key === 'К') && selected) {
             selectedRotated = !selectedRotated;
             render();
@@ -220,23 +374,14 @@
 
     window.addEventListener('message', function (event) {
         var data = event.data || {};
-        if (data.action === 'open') {
-            app.classList.remove('hidden');
-            return;
-        }
-        if (data.action === 'close') {
-            app.classList.add('hidden');
-            return;
-        }
+        if (data.action === 'open') { app.classList.remove('hidden'); return; }
+        if (data.action === 'close') { app.classList.add('hidden'); destroyDragGhost(); customDrag = null; return; }
         if (data.action === 'state') {
             state = data.payload || state;
             selected = selected && findItem(selected) ? selected : null;
             render();
             return;
         }
-        if (data.action === 'notice') {
-            setNotice(data.message || '', data.kind || '');
-            return;
-        }
+        if (data.action === 'notice') { setNotice(data.message || '', data.kind || ''); return; }
     });
 })();

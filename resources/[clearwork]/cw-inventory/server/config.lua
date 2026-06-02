@@ -39,3 +39,7 @@ CWInventoryConfig.EquipmentSlots = {
 }
 
 CWInventoryConfig.DefaultStarterItems = CWInventoryConfig.DefaultStarterItems or {}
+
+-- Временный локальный мешок при выбросе предмета из /inventory.
+-- Позже это лучше вынести в полноценный cw-worlditems/cw-drops.
+CWInventoryConfig.DropBagModel = CWInventoryConfig.DropBagModel or 'p_bag01x'
