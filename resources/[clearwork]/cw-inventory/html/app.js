@@ -10,7 +10,7 @@
     var groundEl = document.getElementById('ground');
     var selectionInfo = document.getElementById('selectionInfo');
 
-    var APP_VERSION = 'v28-single-main-paperdoll';
+    var APP_VERSION = 'v29-ground-align-silhouette-clean';
     var CELL = 52;
     var GROUND_CELL = 38;
     var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {}, ground: null };
@@ -518,10 +518,24 @@ function renderEquipment() {
         });
     }
 
+
+    function containerDisplayLabel(container) {
+        var id = String(container && container.id || '');
+        var label = String(container && (container.label || container.id) || '').trim();
+        if (id === 'main' && (!label || label.toLowerCase() === 'инвентарь')) return 'Основной';
+        return label || id || 'Контейнер';
+    }
+
+    function groundDisplayLabel(ground) {
+        var label = String(ground && ground.label || '').trim();
+        if (!label || label.toLowerCase() === 'земля') return 'Земля рядом';
+        return label;
+    }
+
     function renderContainer(container) {
         var wrap = document.createElement('div');
         wrap.className = 'container-box main-container-box';
-        wrap.innerHTML = '<div class="container-head"><b>' + escapeHtml(container.label || container.id) + '</b><span>' +
+        wrap.innerHTML = '<div class="container-head"><b>' + escapeHtml(containerDisplayLabel(container)) + '</b><span>' +
             escapeHtml(container.width) + 'x' + escapeHtml(container.height) + '</span></div>';
 
         var grid = document.createElement('div');
@@ -580,7 +594,7 @@ function renderEquipment() {
         var h = Number(ground.height || 8) || 8;
         var box = document.createElement('div');
         box.className = 'ground-box';
-        box.innerHTML = '<div class="container-head"><h2>' + escapeHtml(ground.label || 'Земля') + '</h2><span>' + escapeHtml(w) + 'x' + escapeHtml(h) + '</span></div>';
+        box.innerHTML = '<div class="container-head"><h2>' + escapeHtml(groundDisplayLabel(ground)) + '</h2><span>' + escapeHtml(w) + 'x' + escapeHtml(h) + '</span></div>';
         var grid = document.createElement('div');
         grid.className = 'ground-grid';
         grid.style.gridTemplateColumns = 'repeat(' + w + ', ' + GROUND_CELL + 'px)';
@@ -599,10 +613,10 @@ function renderEquipment() {
         (ground.items || []).forEach(function (item) {
             var el = document.createElement('div');
             el.className = 'ground-item ' + escapeHtml(item.type || '');
-            el.style.left = (Number(item.x || 0) * CELL) + 'px';
-            el.style.top = (Number(item.y || 0) * CELL) + 'px';
-            el.style.width = (Number(item.width || 1) * CELL) + 'px';
-            el.style.height = (Number(item.height || 1) * CELL) + 'px';
+            el.style.left = (Number(item.x || 0) * GROUND_CELL) + 'px';
+            el.style.top = (Number(item.y || 0) * GROUND_CELL) + 'px';
+            el.style.width = (Number(item.width || 1) * GROUND_CELL) + 'px';
+            el.style.height = (Number(item.height || 1) * GROUND_CELL) + 'px';
             el.title = itemLabel(item) + '\n' + (item.description || '');
             el.innerHTML = '<div class="item-name">' + escapeHtml(itemLabel(item)) + '</div>' +
                 '<div class="item-meta">' + (Number(item.amount || 1) > 1 ? 'x' + escapeHtml(item.amount) : '') + '</div>';
