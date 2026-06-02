@@ -2,7 +2,7 @@
     'use strict';
 
     var DEBUG = true;
-    var INVENTORY_JS_VERSION = 'v18-ui-scroll-ghost-time';
+    var INVENTORY_JS_VERSION = 'v19-drag-opacity-target-outline';
     var CELL = 34;
 
     var lastCharacters = [];
@@ -19,6 +19,7 @@
     var customDrag = null;
     var dragGhost = null;
     var dragOverElement = null;
+    var dragPreviewElements = [];
     var suppressNextCatalogClick = false;
     var inventoryDrag = null;
     var inventoryDragGhost = null;
@@ -223,6 +224,8 @@
             '.admin-equip-list { display: grid; gap: 6px; }',
             '.admin-equip-slot { border: 1px solid rgba(59,33,15,.65); background: rgba(241,223,170,.5); min-height: 52px; padding: 7px; }',
             '.admin-equip-slot.drag-over, .admin-inv-cell.drag-over { outline: 2px solid #8b0000; outline-offset: -2px; }',
+            '.admin-inv-cell.drop-preview { outline: 2px solid rgba(139,0,0,.95); outline-offset: -2px; background: rgba(139,0,0,.18); box-shadow: inset 0 0 0 1px rgba(255,244,205,.45); }',
+            '.admin-equip-slot.drag-over { background: rgba(139,0,0,.14); box-shadow: inset 0 0 0 1px rgba(255,244,205,.4); }',
             '.slot-title { font-weight: 700; letter-spacing: .05em; text-transform: uppercase; font-size: 12px; }',
             '.empty-slot { font-size: 13px; opacity: .68; margin-top: 5px; font-style: italic; }',
             '.admin-equip-item { margin-top: 5px; border: 1px solid rgba(59,33,15,.45); padding: 5px; background: rgba(59,33,15,.12); cursor: grab; user-select: none; }',
@@ -230,6 +233,8 @@
             '.admin-inv-grid { position: relative; display: grid; border: 1px solid rgba(59,33,15,.6); background: rgba(0,0,0,.05); width: max-content; }',
             '.admin-inv-cell { width: ' + CELL + 'px; height: ' + CELL + 'px; border-right: 1px solid rgba(59,33,15,.24); border-bottom: 1px solid rgba(59,33,15,.24); box-sizing: border-box; }',
             '.admin-grid-item { position: absolute; box-sizing: border-box; border: 2px solid rgba(59,33,15,.8); background: rgba(59,33,15,.18); padding: 4px; overflow: hidden; pointer-events: auto; cursor: grab; user-select: none; }',
+            '.admin-catalog-item.dragging-source, .admin-grid-item.dragging-source, .admin-equip-item.dragging-source { opacity: .32 !important; filter: grayscale(.25); }',
+            '.admin-catalog-item.dragging-source *, .admin-grid-item.dragging-source *, .admin-equip-item.dragging-source * { opacity: .45 !important; }',
             '.admin-grid-item .item-name { font-weight: 700; font-size: 12px; line-height: 1.1; }',
             '.admin-grid-item .item-meta { font-size: 11px; opacity: .8; margin-top: 3px; }',
             '.admin-catalog-tabs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }',
@@ -239,7 +244,7 @@
             '.admin-catalog-item { border: 1px solid rgba(59,33,15,.6); background: rgba(241,223,170,.58); padding: 7px; cursor: grab; user-select: none; }',
             '.admin-catalog-item.selected { outline: 2px solid #8b0000; background: rgba(255,244,205,.92); }',
             '.admin-catalog-item:active { cursor: grabbing; }',
-            '.admin-catalog-drag-ghost, .admin-inventory-drag-ghost { position: fixed; z-index: 999999; pointer-events: none; border: 2px solid rgba(59,33,15,.95); background: rgba(241,223,170,.96); color: #2b180c; padding: 0; min-width: 0; box-shadow: 0 4px 12px rgba(0,0,0,.35); font-weight: 700; overflow: hidden; }',
+            '.admin-catalog-drag-ghost, .admin-inventory-drag-ghost { position: fixed; z-index: 999999; pointer-events: none; border: 2px solid rgba(59,33,15,.95); background: rgba(241,223,170,.96); color: #2b180c; padding: 0; min-width: 0; box-shadow: 0 4px 12px rgba(0,0,0,.35); font-weight: 700; overflow: hidden; opacity: .58; }',
             '.admin-drag-ghost-grid { position: absolute; inset: 0; display: grid; }',
             '.admin-drag-ghost-cell { border-right: 1px solid rgba(59,33,15,.35); border-bottom: 1px solid rgba(59,33,15,.35); background: rgba(59,33,15,.09); }',
             '.admin-drag-ghost-label { position: absolute; left: 4px; right: 4px; top: 4px; font-size: 12px; line-height: 1.05; overflow: hidden; text-shadow: 0 1px 0 rgba(255,244,205,.65); }',
@@ -477,14 +482,44 @@
             dragOverElement.classList.remove('drag-over');
         }
         dragOverElement = null;
+
+        dragPreviewElements.forEach(function (el) {
+            if (el && el.classList) el.classList.remove('drop-preview');
+        });
+        dragPreviewElements = [];
     }
 
-    function setDragOverElement(element) {
-        if (dragOverElement === element) return;
+    function collectPreviewCells(cell, size) {
+        if (!cell) return [];
+        size = size || { w: 1, h: 1 };
+        var grid = closestElement(cell, '.admin-inv-grid');
+        if (!grid) return [];
+
+        var startX = Number(cell.dataset.x || 0);
+        var startY = Number(cell.dataset.y || 0);
+        var cells = [];
+        for (var yy = 0; yy < size.h; yy++) {
+            for (var xx = 0; xx < size.w; xx++) {
+                var found = grid.querySelector('.admin-inv-cell[data-x="' + (startX + xx) + '"][data-y="' + (startY + yy) + '"]');
+                if (found) cells.push(found);
+            }
+        }
+        return cells;
+    }
+
+    function setDragPreview(target, size) {
+        var element = target && (target.cell || target.slot) ? (target.cell || target.slot) : null;
+        if (dragOverElement === element && dragPreviewElements.length) return;
+
         clearDragOverElement();
         dragOverElement = element || null;
-        if (dragOverElement && dragOverElement.classList) {
-            dragOverElement.classList.add('drag-over');
+
+        if (!dragOverElement || !dragOverElement.classList) return;
+        dragOverElement.classList.add('drag-over');
+
+        if (target && target.cell) {
+            dragPreviewElements = collectPreviewCells(target.cell, size);
+            dragPreviewElements.forEach(function (cell) { cell.classList.add('drop-preview'); });
         }
     }
 
@@ -494,6 +529,10 @@
         }
         dragGhost = null;
         clearDragOverElement();
+    }
+
+    function clearSourceElement(source) {
+        if (source && source.classList) source.classList.remove('dragging-source');
     }
 
     function updateDragGhost(x, y) {
@@ -516,7 +555,7 @@
         dragGhost.style.top = (y + 12) + 'px';
 
         var target = getAdminDropTargetFromPoint(x, y);
-        setDragOverElement(target.cell || target.slot || null);
+        setDragPreview(target, visualSizeFromDefinition(customDrag.item, customDrag.rotated === true));
     }
 
     function startCatalogMouseDrag(event, item) {
@@ -536,6 +575,7 @@
             item: item,
             amount: amount,
             rotated: keepRotated,
+            sourceElement: closestElement(event.target, '.admin-catalog-item'),
             startX: event.clientX,
             startY: event.clientY,
             dragging: false
@@ -547,6 +587,7 @@
 
         var drag = customDrag;
         customDrag = null;
+        clearSourceElement(drag.sourceElement);
 
         if (!drag.dragging) {
             destroyDragGhost();
@@ -613,6 +654,7 @@
 
         inventoryDrag = {
             itemId: Number(item.id),
+            sourceElement: closestElement(event.target, '.admin-grid-item, .admin-equip-item'),
             startX: event.clientX,
             startY: event.clientY,
             dragging: false
@@ -641,7 +683,7 @@
         inventoryDragGhost.style.top = (y + 12) + 'px';
 
         var target = getAdminDropTargetFromPoint(x, y);
-        setDragOverElement(target.cell || target.slot || null);
+        setDragPreview(target, visualSizeFromStateItem(item));
     }
 
     function finishInventoryMouseDrag(event) {
@@ -649,6 +691,7 @@
 
         var drag = inventoryDrag;
         inventoryDrag = null;
+        clearSourceElement(drag.sourceElement);
 
         if (!drag.dragging) {
             destroyInventoryDragGhost();
@@ -1245,6 +1288,7 @@
 
             if (!inventoryDrag.dragging && (idx > 4 || idy > 4)) {
                 inventoryDrag.dragging = true;
+                if (inventoryDrag.sourceElement && inventoryDrag.sourceElement.classList) inventoryDrag.sourceElement.classList.add('dragging-source');
                 debug('inventory drag start', { itemId: inventoryDrag.itemId });
             }
 
@@ -1262,6 +1306,7 @@
 
         if (!customDrag.dragging && (dx > 4 || dy > 4)) {
             customDrag.dragging = true;
+            if (customDrag.sourceElement && customDrag.sourceElement.classList) customDrag.sourceElement.classList.add('dragging-source');
             selectedCatalog = customDrag.item;
             selectedAmount = customDrag.amount;
             selectedRotated = customDrag.rotated === true;

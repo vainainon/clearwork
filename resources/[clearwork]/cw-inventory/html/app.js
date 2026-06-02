@@ -9,7 +9,7 @@
     var containersEl = document.getElementById('containers');
     var selectionInfo = document.getElementById('selectionInfo');
 
-    var APP_VERSION = 'v18-drag-ghost-grid';
+    var APP_VERSION = 'v19-drag-opacity-target-outline';
     var CELL = 48;
     var state = { items: [], equipment: {}, containers: [], equipmentSlots: [], definitions: {} };
     var selected = null;
@@ -17,6 +17,7 @@
     var customDrag = null;
     var dragGhost = null;
     var dragOverElement = null;
+    var dragPreviewElements = [];
     var suppressItemClick = false;
 
     function post(name, data) {
@@ -128,19 +129,54 @@
     function clearDragOverElement() {
         if (dragOverElement && dragOverElement.classList) dragOverElement.classList.remove('drag-over');
         dragOverElement = null;
+
+        dragPreviewElements.forEach(function (el) {
+            if (el && el.classList) el.classList.remove('drop-preview');
+        });
+        dragPreviewElements = [];
     }
 
-    function setDragOverElement(element) {
-        if (dragOverElement === element) return;
+    function collectPreviewCells(cell, size) {
+        if (!cell) return [];
+        size = size || { w: 1, h: 1 };
+        var grid = closestElement(cell, '.grid-wrap');
+        if (!grid) return [];
+
+        var startX = Number(cell.dataset.x || 0);
+        var startY = Number(cell.dataset.y || 0);
+        var cells = [];
+        for (var yy = 0; yy < size.h; yy++) {
+            for (var xx = 0; xx < size.w; xx++) {
+                var found = grid.querySelector('.cell[data-x="' + (startX + xx) + '"][data-y="' + (startY + yy) + '"]');
+                if (found) cells.push(found);
+            }
+        }
+        return cells;
+    }
+
+    function setDragPreview(target, size) {
+        var element = target && (target.cell || target.slot) ? (target.cell || target.slot) : null;
+        if (dragOverElement === element && dragPreviewElements.length) return;
+
         clearDragOverElement();
         dragOverElement = element || null;
-        if (dragOverElement && dragOverElement.classList) dragOverElement.classList.add('drag-over');
+        if (!dragOverElement || !dragOverElement.classList) return;
+        dragOverElement.classList.add('drag-over');
+
+        if (target && target.cell) {
+            dragPreviewElements = collectPreviewCells(target.cell, size);
+            dragPreviewElements.forEach(function (cell) { cell.classList.add('drop-preview'); });
+        }
     }
 
     function destroyDragGhost() {
         if (dragGhost && dragGhost.parentNode) dragGhost.parentNode.removeChild(dragGhost);
         dragGhost = null;
         clearDragOverElement();
+    }
+
+    function clearSourceElement(source) {
+        if (source && source.classList) source.classList.remove('dragging-source');
     }
 
     function getCellFromPoint(x, y) {
@@ -171,6 +207,7 @@
 
         customDrag = {
             itemId: Number(item.id),
+            sourceElement: closestElement(event.target, '.grid-item, .equip-item'),
             startX: event.clientX,
             startY: event.clientY,
             dragging: false
@@ -194,7 +231,7 @@
         dragGhost.style.top = (y + 12) + 'px';
 
         var target = getDropTargetFromPoint(x, y);
-        setDragOverElement(target.cell || target.slot || null);
+        setDragPreview(target, visualSizeForItem(item, !!selectedRotated));
     }
 
     function finishItemMouseDrag(event) {
@@ -202,6 +239,7 @@
 
         var drag = customDrag;
         customDrag = null;
+        clearSourceElement(drag.sourceElement);
 
         if (!drag.dragging) {
             destroyDragGhost();
@@ -370,6 +408,7 @@
         var dy = Math.abs((event.clientY || 0) - customDrag.startY);
         if (!customDrag.dragging && (dx > 4 || dy > 4)) {
             customDrag.dragging = true;
+            if (customDrag.sourceElement && customDrag.sourceElement.classList) customDrag.sourceElement.classList.add('dragging-source');
             var item = findItem(customDrag.itemId);
             if (item) {
                 selected = Number(item.id);
