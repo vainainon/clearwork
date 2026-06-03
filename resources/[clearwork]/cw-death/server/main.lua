@@ -54,17 +54,59 @@ local function NormalizeCoords(coords)
 end
 
 local function EnsureColumn(tableName, columnName, definition)
-    local exists = MySQL.scalar.await([[
-        SELECT COUNT(*)
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE()
-          AND TABLE_NAME = ?
-          AND COLUMN_NAME = ?
-    ]], { tableName, columnName })
+    local exists = 0
 
-    if tonumber(exists) == 0 then
-        MySQL.query.await(('ALTER TABLE `%s` ADD COLUMN %s'):format(tableName, definition))
+    local okCheck, result = pcall(function()
+        return MySQL.scalar.await([[
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = ?
+              AND COLUMN_NAME = ?
+        ]], { tableName, columnName })
+    end)
+
+    if okCheck then
+        exists = tonumber(result) or 0
+    else
+        print(('[cw-death] Column check failed for %s.%s: %s'):format(
+            tostring(tableName),
+            tostring(columnName),
+            tostring(result)
+        ))
     end
+
+    if exists > 0 then
+        return
+    end
+
+    local sql = ('ALTER TABLE `%s` ADD COLUMN %s'):format(tableName, definition)
+
+    local okAlter, err = pcall(function()
+        MySQL.query.await(sql)
+    end)
+
+    if okAlter then
+        return
+    end
+
+    local message = tostring(err or '')
+
+    -- MariaDB/MySQL error 1060: duplicate column. This can happen if another
+    -- resource/schema migration created the column between the check and ALTER.
+    if message:find('Duplicate column', 1, true)
+        or message:find('Duplicate column name', 1, true)
+        or message:find('1060', 1, true)
+    then
+        print(('[cw-death] Column %s.%s already exists, skipping migration.'):format(
+            tostring(tableName),
+            tostring(columnName)
+        ))
+
+        return
+    end
+
+    error(err)
 end
 
 local function EnsureSchema()
@@ -117,7 +159,10 @@ local function GetCWPlayer(src)
         return exports['cw-core']:GetPlayer(src)
     end)
 
-    if ok then return player end
+    if ok then
+        return player
+    end
+
     return nil
 end
 
@@ -135,6 +180,7 @@ local function ClearSelectedCharacter(src)
     end)
 
     local player = GetCWPlayer(src)
+
     if player then
         player.character = nil
     end
@@ -142,7 +188,10 @@ end
 
 local function GetCharacterRow(characterId)
     characterId = tonumber(characterId)
-    if not characterId then return nil end
+
+    if not characterId then
+        return nil
+    end
 
     return MySQL.single.await([[
         SELECT
@@ -171,10 +220,16 @@ end
 
 local function SetPersistentDownedState(characterId, stateName, remaining, chance, roll, coords)
     characterId = tonumber(characterId)
-    if not characterId then return false end
+
+    if not characterId then
+        return false
+    end
 
     stateName = tostring(stateName or '')
-    if not VALID_STATES[stateName] then return false end
+
+    if not VALID_STATES[stateName] then
+        return false
+    end
 
     remaining = ClampRemaining(remaining)
     chance = chance ~= nil and ClampChance(chance) or nil
@@ -229,7 +284,10 @@ end
 
 local function ClearPersistentDownedState(characterId)
     characterId = tonumber(characterId)
-    if not characterId then return false end
+
+    if not characterId then
+        return false
+    end
 
     MySQL.update.await([[
         UPDATE characters
@@ -247,7 +305,10 @@ end
 local function SetCharacterPermadead(src, characterId, coords)
     coords = NormalizeCoords(coords)
     characterId = tonumber(characterId)
-    if not characterId then return false end
+
+    if not characterId then
+        return false
+    end
 
     local affected = MySQL.update.await([[
         UPDATE characters
@@ -258,9 +319,16 @@ local function SetCharacterPermadead(src, characterId, coords)
             pos_z = ?,
             heading = ?
         WHERE id = ?
-    ]], { coords.x, coords.y, coords.z, coords.heading, characterId })
+    ]], {
+        coords.x,
+        coords.y,
+        coords.z,
+        coords.heading,
+        characterId
+    })
 
     local player = GetCWPlayer(src)
+
     if player and player.character and tonumber(player.character.id) == characterId then
         player.character.is_dead = 1
         player.character.revived_at = nil
@@ -275,7 +343,11 @@ end
 
 local function GetCurrentCharacterId(src)
     local player = GetCWPlayer(src)
-    if not player or not player.character then return nil, nil end
+
+    if not player or not player.character then
+        return nil, nil
+    end
+
     return tonumber(player.character.id), player
 end
 
@@ -290,14 +362,20 @@ end
 
 local function IsPlayerDeathLocked(src)
     src = tonumber(src)
-    if not src then return false end
+
+    if not src then
+        return false
+    end
 
     if activeKnockdowns[src] ~= nil then
         return true
     end
 
     local characterId = GetCurrentCharacterId(src)
-    if not characterId then return false end
+
+    if not characterId then
+        return false
+    end
 
     local stateName = MySQL.scalar.await(
         'SELECT downed_state FROM characters WHERE id = ? LIMIT 1',
@@ -309,24 +387,42 @@ end
 
 local function IsPlayerPermanentlyDead(src)
     src = tonumber(src)
-    if not src then return false end
+
+    if not src then
+        return false
+    end
 
     local characterId, player = GetCurrentCharacterId(src)
-    if not characterId then return false end
 
-    if player and player.character and IsDeadFlag(player.character.is_dead) then return true end
+    if not characterId then
+        return false
+    end
+
+    if player and player.character and IsDeadFlag(player.character.is_dead) then
+        return true
+    end
+
     return IsCharacterPermadead(characterId)
 end
 
 local function RestorePersistentState(src)
     local characterId, player = GetCurrentCharacterId(src)
-    if not characterId or not player then return end
+
+    if not characterId or not player then
+        return
+    end
 
     local row = GetCharacterRow(characterId)
-    if not row then return end
+
+    if not row then
+        return
+    end
 
     local stateName = tostring(row.downed_state or '')
-    if not VALID_STATES[stateName] then return end
+
+    if not VALID_STATES[stateName] then
+        return
+    end
 
     local permanent = stateName == 'switch_wait' or IsDeadFlag(row.is_dead)
     local seconds = ClampRemaining(row.downed_remaining_seconds)
@@ -353,6 +449,7 @@ local function RestorePersistentState(src)
             coords = coords,
             alreadyDead = permanent
         })
+
         return
     end
 
@@ -389,6 +486,7 @@ RegisterNetEvent('cw-death:server:knockdown', function(coords)
     SaveCharacterPosition(src, coords)
 
     local characterId = tonumber(player.character.id)
+
     if not characterId then
         activeKnockdowns[src] = nil
         TriggerClientEvent('cw-death:client:cancelKnockdown', src)
@@ -422,9 +520,13 @@ end)
 RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
     local src = source
     local state = activeKnockdowns[src]
-    if not state or state.rolled then return end
+
+    if not state or state.rolled then
+        return
+    end
 
     local player = GetCWPlayer(src)
+
     if not player or not player.character then
         activeKnockdowns[src] = nil
         TriggerClientEvent('cw-death:client:cancelKnockdown', src)
@@ -452,7 +554,10 @@ RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
     local ok, err = pcall(function()
         if permadeath then
             local saved = SetCharacterPermadead(src, state.characterId, state.coords)
-            if not saved then error('database update returned 0 affected rows') end
+
+            if not saved then
+                error('database update returned 0 affected rows')
+            end
         end
     end)
 
@@ -461,6 +566,7 @@ RegisterNetEvent('cw-death:server:rollRoulette', function(coords)
             tostring(state.characterId),
             tostring(err)
         ))
+
         permadeath = false
     end
 
@@ -486,24 +592,33 @@ RegisterNetEvent('cw-death:server:updateDownedState', function(data)
     data = data or {}
 
     local characterId = GetCurrentCharacterId(src)
-    if not characterId then return end
+
+    if not characterId then
+        return
+    end
 
     local stateName = tostring(data.phase or '')
-    if not VALID_STATES[stateName] then return end
+
+    if not VALID_STATES[stateName] then
+        return
+    end
 
     local remaining = ClampRemaining(data.seconds)
     local chance = data.chance ~= nil and ClampChance(data.chance) or nil
     local roll = data.roll ~= nil and tonumber(data.roll) or nil
     local coords = data.coords and NormalizeCoords(data.coords) or nil
-
     local state = activeKnockdowns[src]
+
     if state and state.characterId == characterId then
         state.phase = stateName
         state.remaining = remaining
         state.chance = chance or state.chance
         state.roll = roll or state.roll
         state.permanent = data.permanent == true or stateName == 'switch_wait'
-        if coords then state.coords = coords end
+
+        if coords then
+            state.coords = coords
+        end
     end
 
     SetPersistentDownedState(characterId, stateName, remaining, chance, roll, coords)
@@ -512,7 +627,10 @@ end)
 RegisterNetEvent('cw-death:server:finishKnockdown', function(coords)
     local src = source
     local characterId = GetCurrentCharacterId(src)
-    if not characterId then return end
+
+    if not characterId then
+        return
+    end
 
     if IsCharacterPermadead(characterId) then
         TriggerClientEvent('cw-death:client:restoreDownedState', src, {
@@ -521,6 +639,7 @@ RegisterNetEvent('cw-death:server:finishKnockdown', function(coords)
             chance = 100,
             coords = NormalizeCoords(coords)
         })
+
         return
     end
 
@@ -535,6 +654,7 @@ end)
 RegisterNetEvent('cw-death:server:finishPermadeathMenu', function(coords)
     local src = source
     local characterId = GetCurrentCharacterId(src)
+
     if not characterId then
         activeKnockdowns[src] = nil
         TriggerClientEvent('cw-death:client:finishSwitch', src)
@@ -553,7 +673,10 @@ end)
 RegisterNetEvent('cw-death:server:clearCurrentDownedState', function(coords)
     local src = source
     local characterId = GetCurrentCharacterId(src)
-    if not characterId then return end
+
+    if not characterId then
+        return
+    end
 
     ClearPersistentDownedState(characterId)
     activeKnockdowns[src] = nil
