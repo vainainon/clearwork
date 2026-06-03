@@ -126,14 +126,9 @@ function renderCharacters() {
 
         let statusHtml = '';
 
-        // Пермакилл всегда важнее статуса "сейчас выбран".
+        // Для убитого персонажа не показываем длинное предупреждение: достаточно красной карточки и кнопки "Убит".
         if (isDead) {
-            statusHtml = `
-                <div class="delete-status dead-status">
-                    <strong>ПЕРМА-КИЛЛ.</strong><br>
-                    Персонаж убит. Его нельзя выбрать, пока администрация не снимет пермакилл.
-                </div>
-            `;
+            statusHtml = '';
         } else if (isCurrent) {
             statusHtml = `
                 <div class="delete-status selected-status">

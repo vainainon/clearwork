@@ -53,6 +53,11 @@ local function EnsureSchema()
 
     EnsureColumn('characters', 'is_dead', '`is_dead` TINYINT(1) NOT NULL DEFAULT 0')
     EnsureColumn('characters', 'revived_at', '`revived_at` DATETIME NULL')
+    EnsureColumn('characters', 'downed_state', '`downed_state` VARCHAR(32) NULL')
+    EnsureColumn('characters', 'downed_remaining_seconds', '`downed_remaining_seconds` INT NOT NULL DEFAULT 0')
+    EnsureColumn('characters', 'downed_roll', '`downed_roll` INT NULL')
+    EnsureColumn('characters', 'downed_chance', '`downed_chance` INT NULL')
+    EnsureColumn('characters', 'downed_updated_at', '`downed_updated_at` DATETIME NULL')
 end
 
 local function GetPermadeathChance()
@@ -263,7 +268,12 @@ RegisterNetEvent('cw-admin:server:medical:reviveCharacter', function(characterId
     local affected = MySQL.update.await([[
         UPDATE characters
         SET is_dead = 0,
-            revived_at = NOW()
+            revived_at = NOW(),
+            downed_state = NULL,
+            downed_remaining_seconds = 0,
+            downed_roll = NULL,
+            downed_chance = NULL,
+            downed_updated_at = NULL
         WHERE id = ?
     ]], { characterId })
 

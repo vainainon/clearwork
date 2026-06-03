@@ -141,14 +141,12 @@ end
 local function OpenCharacterMenu()
     DisableSpawnManagerAutoSpawn()
 
-    -- Блок только во время активного нокдауна/рулетки.
-    -- Если персонаж уже получил пермакилл, меню открываем: игрок должен выбрать другого или создать нового.
+    -- Во время смерти/нокдауна меню персонажей открывается только через кнопку в окне смерти.
+    -- Это убирает баг, где /chars + закрытие меню поднимало даже убитого персонажа.
     if characterSelected and IsDeathSwitchBlocked() then
-        Notify('Смена персонажа недоступна: текущий персонаж ранен или идёт рулетка.')
+        Notify('Смена персонажа недоступна: текущий персонаж ранен или ждёт исход смерти.')
         return
     end
-
-    NotifyDeathMenuOpened()
 
     local firstMenu = not characterSelected
     hidePedForCurrentMenu = firstMenu
@@ -189,6 +187,17 @@ end, false)
 RegisterCommand('changechar', function()
     OpenCharacterMenu()
 end, false)
+
+
+RegisterNetEvent('cw-characters:client:forceOpenMenu', function()
+    -- Используется cw-death после финального таймера пермакилла.
+    -- Сбрасываем локально выбранного персонажа, чтобы кнопку закрытия нельзя было использовать как обход смерти.
+    characterSelected = false
+    currentCharacterId = nil
+    firstOpenDone = true
+    hidePedForCurrentMenu = true
+    OpenCharacterMenu()
+end)
 
 RegisterNetEvent('cw-characters:client:accountNotReady', function()
     accountRetryCount = accountRetryCount + 1
@@ -258,7 +267,7 @@ end)
 
 RegisterNUICallback('selectCharacter', function(data, cb)
     if IsDeathSwitchBlocked() then
-        Notify('Смена персонажа недоступна: текущий персонаж ранен или идёт рулетка.')
+        Notify('Смена персонажа недоступна: текущий персонаж ранен или ждёт исход смерти.')
         cb({ ok = false })
         return
     end

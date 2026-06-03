@@ -1,8 +1,10 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8" />
-    <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClearWork Death</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="deathRoot" class="hidden">
@@ -16,14 +18,12 @@
             <div class="death-layout">
                 <div class="wheel-wrap">
                     <div class="pointer"><span></span></div>
-
                     <div id="wheel" class="wheel">
                         <div class="wheel-face">
                             <div class="wheel-label label-top">01</div>
                             <div class="wheel-label label-right">25</div>
                             <div class="wheel-label label-bottom">50</div>
                             <div class="wheel-label label-left">75</div>
-
                             <div class="hub">
                                 <span>БРОСОК</span>
                                 <strong id="rollValue">—</strong>
@@ -43,24 +43,21 @@
                             <span>Шанс смерти</span>
                             <strong id="chanceValue">—</strong>
                         </div>
-
                         <div class="stat">
-                            <span>До рулетки</span>
+                            <span id="countdownLabel">До рулетки</span>
                             <strong id="countdownValue">5</strong>
                         </div>
                     </div>
 
-                    <p id="text" class="death-text">
-                        Персонаж ранен. До вращения колеса осталось несколько секунд.
-                    </p>
-
-                    <div id="timer" class="timer"></div>
+                    <p id="text" class="death-text">Персонаж ранен. До вращения колеса осталось несколько секунд.</p>
+                    <div id="timer" class="timer">До вращения колеса: 5</div>
+                    <button id="actionButton" class="death-action hidden" type="button" disabled>Подняться</button>
                 </div>
             </div>
 
             <div class="death-footer">
                 <span id="footerLeft">Красная зона — перманентная смерть.</span>
-                <span id="footerRight">1–100</span>
+                <span id="footerRight">Бросок 1–100</span>
             </div>
         </div>
     </div>

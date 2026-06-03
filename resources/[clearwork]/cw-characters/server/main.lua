@@ -26,11 +26,31 @@ local function IsDeathSwitchLocked(src)
     return ok and locked == true
 end
 
+
+local function GetAliveDownedCharacterId(accountId)
+    if not accountId then return nil end
+    if GetResourceState('cw-death') ~= 'started' then return nil end
+
+    local ok, row = pcall(function()
+        return MySQL.single.await([[
+            SELECT id
+            FROM characters
+            WHERE account_id = ?
+              AND (is_dead = 0 OR is_dead IS NULL)
+              AND downed_state IN ('roulette', 'revive_wait')
+            LIMIT 1
+        ]], { accountId })
+    end)
+
+    if not ok then return nil end
+    return row and tonumber(row.id) or nil
+end
+
 local function SendOpenBlocked(src)
     TriggerClientEvent(
         'cw-characters:client:openFailed',
         src,
-        'Смена персонажа недоступна: текущий персонаж ранен или идёт рулетка.'
+        'Смена персонажа недоступна: текущий персонаж ранен или ждёт исход смерти.'
     )
 end
 
@@ -55,9 +75,8 @@ RegisterNetEvent('cw-characters:server:openCharacterMenu', function(coords)
         return
     end
 
-    -- Блокируем только активный нокдаун/рулетку.
-    -- После финального пермакилла игрок должен иметь возможность выбрать другого персонажа
-    -- или создать нового. Выбор самого убитого персонажа всё равно блокируется ниже.
+    -- Блокируем весь активный процесс смерти: рулетка, ожидание подъёма и ожидание смены персонажа.
+    -- После финального таймера cw-death сам откроет меню персонажей через отдельную кнопку.
     if player.character and IsDeathSwitchLocked(src) then
         SendOpenBlocked(src)
         return
@@ -267,10 +286,17 @@ RegisterNetEvent('cw-characters:server:selectCharacter', function(payload)
 
     if not characterId then return end
 
-    -- Во время нокдауна/рулетки переключаться нельзя.
-    -- После уже случившегося пермакилла переключение на другого живого персонажа разрешено.
+    local downedCharacterId = GetAliveDownedCharacterId(player.account_id)
+    if downedCharacterId and downedCharacterId ~= characterId then
+        TriggerClientEvent('cw-characters:client:selectFailed', src, 'У тебя есть раненый персонаж. Сначала вернись на него и дождись исхода нокдауна.')
+        CWCharacters.SendCharacters(src, player)
+        return
+    end
+
+    -- Во время активного процесса смерти переключаться нельзя.
+    -- Если выпал пермакилл, меню откроется только после пятиминутного таймера через кнопку cw-death.
     if player.character and IsDeathSwitchLocked(src) then
-        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Смена персонажа недоступна: текущий персонаж ранен или идёт рулетка.')
+        TriggerClientEvent('cw-characters:client:selectFailed', src, 'Смена персонажа недоступна: текущий персонаж ранен или ждёт исход смерти.')
         CWCharacters.SendCharacters(src, player)
         return
     end
