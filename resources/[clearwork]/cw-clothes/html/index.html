@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div id="app" class="hidden">
+        <div class="panel">
+            <header class="header">
+                <div>
+                    <div class="kicker">CLEARWORK CLOTHIER</div>
+                    <h1>Лавка одежды</h1>
+                    <p>Выбери вещь, посмотри вариацию, отложи у продавца и забери в свой инвентарь.</p>
+                </div>
+                <button id="closeBtn" class="close">×</button>
+            </header>
+
+            <main class="layout">
+                <aside class="categories">
+                    <h2>Разделы</h2>
+                    <div id="categoryList" class="list"></div>
+                    <div class="hint">
+                        ← / → разделы<br>
+                        ↑ / ↓ вещи<br>
+                        Enter купить
+                    </div>
+                </aside>
+
+                <section class="goods">
+                    <div class="section-title">
+                        <h2 id="categoryTitle">Ассортимент</h2>
+                        <span id="visualStatus">Превью готово</span>
+                    </div>
+                    <div id="itemList" class="item-list"></div>
+                </section>
+
+                <section class="details">
+                    <h2>Вариации</h2>
+                    <div id="detailsBox" class="details-box">
+                        <div class="empty">Выбери предмет.</div>
+                    </div>
+                    <button id="buyBtn" class="buy" disabled>Отложить у продавца</button>
+                </section>
+
+                <aside class="vendor">
+                    <div class="section-title">
+                        <h2>У продавца</h2>
+                        <button id="clearVendorBtn">Очистить</button>
+                    </div>
+                    <p class="vendor-note">Этот список видишь только ты. Другие игроки не могут забрать эти вещи.</p>
+                    <div id="basketList" class="basket"></div>
+                </aside>
+            </main>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

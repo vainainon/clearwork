@@ -96,7 +96,13 @@ CWItems.Definitions = {
         height = 3,
         stack = 1,
         weight = 1.5,
-        container = { id = 'coat', label = 'Карманы пальто', width = 4, height = 3, order = 30 }
+        container = {
+            id = 'coat',
+            label = 'Карманы пальто',
+            width = 4,
+            height = 3,
+            order = 30
+        }
     },
 
     basic_vest = {
@@ -108,7 +114,13 @@ CWItems.Definitions = {
         height = 2,
         stack = 1,
         weight = 1.0,
-        container = { id = 'vest', label = 'Разгрузка', width = 5, height = 3, order = 40 }
+        container = {
+            id = 'vest',
+            label = 'Разгрузка',
+            width = 5,
+            height = 3,
+            order = 40
+        }
     },
 
     basic_pants = {
@@ -120,7 +132,13 @@ CWItems.Definitions = {
         height = 2,
         stack = 1,
         weight = 0.8,
-        container = { id = 'pants', label = 'Карманы штанов', width = 3, height = 2, order = 35 }
+        container = {
+            id = 'pants',
+            label = 'Карманы штанов',
+            width = 3,
+            height = 2,
+            order = 35
+        }
     },
 
     silver_ring = {
@@ -132,6 +150,137 @@ CWItems.Definitions = {
         height = 1,
         stack = 1,
         weight = 0.05
+    },
+
+    -- ClearWork Clothes Shop items.
+    -- Визуальная часть конкретной вещи хранится в metadata экземпляра предмета,
+    -- который выдаёт cw-clothes. Здесь только размеры, типы и базовые свойства для inventory.
+
+    cw_hat_worn_flat_cap = {
+        label = 'Потёртая плоская кепка',
+        description = 'Головной убор из лавки одежды.',
+        category = 'clothing',
+        type = 'clothing_hat',
+        width = 2,
+        height = 1,
+        stack = 1,
+        weight = 0.35
+    },
+
+    cw_hat_stalker = {
+        label = 'Шляпа следопыта',
+        description = 'Головной убор из лавки одежды.',
+        category = 'clothing',
+        type = 'clothing_hat',
+        width = 2,
+        height = 1,
+        stack = 1,
+        weight = 0.45
+    },
+
+    cw_shirt_union = {
+        label = 'Союзная рубаха',
+        description = 'Рубаха из лавки одежды.',
+        category = 'clothing',
+        type = 'clothing_shirt',
+        width = 2,
+        height = 2,
+        stack = 1,
+        weight = 0.55
+    },
+
+    cw_shirt_work = {
+        label = 'Рабочая рубаха',
+        description = 'Рубаха из лавки одежды.',
+        category = 'clothing',
+        type = 'clothing_shirt',
+        width = 2,
+        height = 2,
+        stack = 1,
+        weight = 0.65
+    },
+
+    cw_coat_duster = {
+        label = 'Дорожный дастер',
+        description = 'Верхняя одежда из лавки одежды. Даёт дополнительные карманы.',
+        category = 'clothing',
+        type = 'clothing_coat',
+        width = 2,
+        height = 3,
+        stack = 1,
+        weight = 1.8,
+        container = {
+            id = 'coat',
+            label = 'Карманы пальто',
+            width = 4,
+            height = 3,
+            order = 30
+        }
+    },
+
+    cw_coat_worker = {
+        label = 'Рабочая куртка',
+        description = 'Верхняя одежда из лавки одежды. Даёт дополнительные карманы.',
+        category = 'clothing',
+        type = 'clothing_coat',
+        width = 2,
+        height = 2,
+        stack = 1,
+        weight = 1.3,
+        container = {
+            id = 'coat',
+            label = 'Карманы куртки',
+            width = 3,
+            height = 2,
+            order = 30
+        }
+    },
+
+    cw_vest_worker = {
+        label = 'Рабочий жилет',
+        description = 'Жилет из лавки одежды. Даёт дополнительные карманы.',
+        category = 'clothing',
+        type = 'clothing_vest',
+        width = 2,
+        height = 2,
+        stack = 1,
+        weight = 0.9,
+        container = {
+            id = 'vest',
+            label = 'Карманы жилета',
+            width = 4,
+            height = 2,
+            order = 40
+        }
+    },
+
+    cw_pants_work = {
+        label = 'Рабочие штаны',
+        description = 'Штаны из лавки одежды. Даёт карманы штанов.',
+        category = 'clothing',
+        type = 'clothing_pants',
+        width = 2,
+        height = 2,
+        stack = 1,
+        weight = 0.8,
+        container = {
+            id = 'pants',
+            label = 'Карманы штанов',
+            width = 3,
+            height = 2,
+            order = 35
+        }
+    },
+
+    cw_boots_workman = {
+        label = 'Рабочие ботинки',
+        description = 'Обувь из лавки одежды.',
+        category = 'clothing',
+        type = 'clothing_boots',
+        width = 2,
+        height = 2,
+        stack = 1,
+        weight = 0.9
     }
 }
 
@@ -150,10 +299,7 @@ function CWItems.GetSize(name, rotated)
     local w = tonumber(def.width) or 1
     local h = tonumber(def.height) or 1
 
-    if rotated then
-        return h, w
-    end
-
+    if rotated then return h, w end
     return w, h
 end
 

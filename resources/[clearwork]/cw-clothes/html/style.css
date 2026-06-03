@@ -1,0 +1,218 @@
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+    font-family: Georgia, serif;
+    color: #ead8ad;
+}
+
+.hidden { display: none !important; }
+
+#app {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle, rgba(0,0,0,.25), rgba(0,0,0,.82));
+}
+
+.panel {
+    width: 1380px;
+    max-width: 94vw;
+    height: 780px;
+    max-height: 90vh;
+    background: rgba(20, 19, 15, .96);
+    border: 2px solid rgba(220, 205, 150, .45);
+    box-shadow: 0 30px 100px rgba(0,0,0,.88), inset 0 0 0 1px rgba(255,255,255,.05);
+    padding: 22px;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 3px double rgba(220,205,150,.5);
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+}
+
+.kicker {
+    letter-spacing: 7px;
+    font-size: 13px;
+    color: rgba(234,216,173,.7);
+}
+
+h1, h2, p { margin: 0; }
+
+h1 {
+    font-size: 42px;
+    text-transform: uppercase;
+    line-height: 1;
+    color: #f1e2b8;
+}
+
+.header p {
+    margin-top: 8px;
+    color: rgba(234,216,173,.7);
+    font-style: italic;
+}
+
+.close {
+    width: 48px;
+    height: 48px;
+    border: 1px solid #74210f;
+    background: #8d120b;
+    color: #fff2ce;
+    font-size: 32px;
+    cursor: pointer;
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: 230px 1fr 310px 300px;
+    gap: 16px;
+    height: calc(100% - 110px);
+}
+
+.categories, .goods, .details, .vendor {
+    border: 1px solid rgba(220,205,150,.32);
+    background: rgba(0,0,0,.24);
+    padding: 14px;
+    overflow: hidden;
+}
+
+h2 {
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    font-size: 20px;
+    color: #f1e2b8;
+    margin-bottom: 12px;
+}
+
+.list, .item-list, .basket {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.category, .item, .variation, .basket-item {
+    border: 1px solid rgba(220,205,150,.28);
+    background: rgba(255,255,255,.035);
+    padding: 11px 12px;
+    cursor: pointer;
+}
+
+.category.active, .item.active, .variation.active {
+    background: rgba(126, 21, 12, .74);
+    border-color: rgba(255,226,170,.58);
+}
+
+.item-list {
+    max-height: 620px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.item strong, .basket-item strong {
+    display: block;
+    color: #fff1c9;
+    font-size: 17px;
+}
+
+.item span, .basket-item span {
+    display: block;
+    color: rgba(234,216,173,.65);
+    font-size: 13px;
+    margin-top: 4px;
+    line-height: 1.35;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+#visualStatus {
+    color: rgba(234,216,173,.65);
+    font-size: 13px;
+    font-style: italic;
+}
+
+.details-box {
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.empty {
+    color: rgba(234,216,173,.55);
+    font-style: italic;
+    padding: 12px;
+}
+
+.buy, #clearVendorBtn, .take-btn {
+    border: 1px solid rgba(220,205,150,.34);
+    background: rgba(80,50,25,.88);
+    color: #f1e2b8;
+    font-family: Georgia, serif;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.buy {
+    width: 100%;
+    height: 56px;
+    margin-top: 12px;
+}
+
+.buy:disabled {
+    opacity: .4;
+    cursor: default;
+}
+
+#clearVendorBtn {
+    height: 34px;
+    padding: 0 10px;
+    font-size: 12px;
+}
+
+.vendor-note {
+    color: rgba(234,216,173,.62);
+    font-size: 13px;
+    line-height: 1.35;
+    margin-bottom: 12px;
+    font-style: italic;
+}
+
+.basket {
+    max-height: 580px;
+    overflow-y: auto;
+}
+
+.take-btn {
+    width: 100%;
+    height: 34px;
+    margin-top: 10px;
+    background: rgba(115, 24, 14, .9);
+}
+
+.hint {
+    margin-top: 18px;
+    border-top: 1px solid rgba(220,205,150,.25);
+    padding-top: 12px;
+    color: rgba(234,216,173,.55);
+    font-size: 13px;
+    line-height: 1.45;
+    font-style: italic;
+}
