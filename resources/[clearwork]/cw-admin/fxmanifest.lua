@@ -1,10 +1,11 @@
 fx_version 'cerulean'
 game 'rdr3'
+
 rdr3_warning 'I acknowledge that this is a prerelease build of RedM, and I am aware my resources *will* become incompatible once RedM ships.'
 
 author 'clearwork'
 description 'ClearWork Admin System'
-version '0.4.4'
+version '0.4.5'
 
 ui_page 'html/index.html'
 
@@ -12,8 +13,9 @@ files {
     'html/index.html',
     'html/style.css',
     'html/app.js',
+    'html/management-ui.js',
     'html/inventory.js',
-	'html/medical.js'
+    'html/medical.js'
 }
 
 server_scripts {
@@ -26,16 +28,15 @@ server_scripts {
     'server/tools.lua',
     'server/management.lua',
     'server/inventory.lua',
-	'server/medical.lua',
+    'server/medical.lua',
     'server/main.lua'
-	
 }
 
 client_scripts {
     'client/tools.lua',
     'client/main.lua',
     'client/inventory.lua',
-	'client/medical.lua',
+    'client/medical.lua',
 }
 
 dependency 'oxmysql'
