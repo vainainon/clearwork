@@ -3,7 +3,6 @@ CWItems = CWItems or {}
 -- cw-items — это справочник предметов.
 -- Здесь НЕ хранится, у какого персонажа сколько предметов.
 -- Реальные экземпляры предметов лежат в БД cw_inventory_items у ресурса cw-inventory.
-
 CWItems.Definitions = {
     bread = {
         label = 'Хлеб',
@@ -152,13 +151,9 @@ CWItems.Definitions = {
         weight = 0.05
     },
 
-    -- ClearWork Clothes Shop items.
-    -- Визуальная часть конкретной вещи хранится в metadata экземпляра предмета,
-    -- который выдаёт cw-clothes. Здесь только размеры, типы и базовые свойства для inventory.
-
     cw_hat_worn_flat_cap = {
         label = 'Потёртая плоская кепка',
-        description = 'Головной убор из лавки одежды.',
+        description = 'Дешёвая рабочая кепка для улиц Сен-Дени.',
         category = 'clothing',
         type = 'clothing_hat',
         width = 2,
@@ -169,7 +164,7 @@ CWItems.Definitions = {
 
     cw_hat_stalker = {
         label = 'Шляпа следопыта',
-        description = 'Головной убор из лавки одежды.',
+        description = 'Широкополая шляпа для дорог и охоты.',
         category = 'clothing',
         type = 'clothing_hat',
         width = 2,
@@ -180,7 +175,7 @@ CWItems.Definitions = {
 
     cw_shirt_union = {
         label = 'Союзная рубаха',
-        description = 'Рубаха из лавки одежды.',
+        description = 'Простая нижняя рубаха без лишнего шика.',
         category = 'clothing',
         type = 'clothing_shirt',
         width = 2,
@@ -191,7 +186,7 @@ CWItems.Definitions = {
 
     cw_shirt_work = {
         label = 'Рабочая рубаха',
-        description = 'Рубаха из лавки одежды.',
+        description = 'Плотная рубаха для работы и дороги.',
         category = 'clothing',
         type = 'clothing_shirt',
         width = 2,
@@ -202,13 +197,13 @@ CWItems.Definitions = {
 
     cw_coat_duster = {
         label = 'Дорожный дастер',
-        description = 'Верхняя одежда из лавки одежды. Даёт дополнительные карманы.',
+        description = 'Длинное пальто от дождя и грязи.',
         category = 'clothing',
         type = 'clothing_coat',
         width = 2,
         height = 3,
         stack = 1,
-        weight = 1.8,
+        weight = 1.6,
         container = {
             id = 'coat',
             label = 'Карманы пальто',
@@ -220,13 +215,13 @@ CWItems.Definitions = {
 
     cw_coat_worker = {
         label = 'Рабочая куртка',
-        description = 'Верхняя одежда из лавки одежды. Даёт дополнительные карманы.',
+        description = 'Короткая куртка для города и порта.',
         category = 'clothing',
         type = 'clothing_coat',
         width = 2,
-        height = 2,
+        height = 3,
         stack = 1,
-        weight = 1.3,
+        weight = 1.2,
         container = {
             id = 'coat',
             label = 'Карманы куртки',
@@ -238,7 +233,7 @@ CWItems.Definitions = {
 
     cw_vest_worker = {
         label = 'Рабочий жилет',
-        description = 'Жилет из лавки одежды. Даёт дополнительные карманы.',
+        description = 'Жилет с карманами под мелочь.',
         category = 'clothing',
         type = 'clothing_vest',
         width = 2,
@@ -256,13 +251,13 @@ CWItems.Definitions = {
 
     cw_pants_work = {
         label = 'Рабочие штаны',
-        description = 'Штаны из лавки одежды. Даёт карманы штанов.',
+        description = 'Обычные штаны для повседневной жизни.',
         category = 'clothing',
         type = 'clothing_pants',
         width = 2,
         height = 2,
         stack = 1,
-        weight = 0.8,
+        weight = 0.85,
         container = {
             id = 'pants',
             label = 'Карманы штанов',
@@ -274,7 +269,7 @@ CWItems.Definitions = {
 
     cw_boots_workman = {
         label = 'Рабочие ботинки',
-        description = 'Обувь из лавки одежды.',
+        description = 'Надёжные ботинки для грязи и мостовой.',
         category = 'clothing',
         type = 'clothing_boots',
         width = 2,

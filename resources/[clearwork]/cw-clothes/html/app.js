@@ -4,10 +4,13 @@ const categoryList = document.getElementById('categoryList');
 const itemList = document.getElementById('itemList');
 const detailsBox = document.getElementById('detailsBox');
 const buyBtn = document.getElementById('buyBtn');
+const buyNowBtn = document.getElementById('buyNowBtn');
+const revertBtn = document.getElementById('revertBtn');
 const basketList = document.getElementById('basketList');
 const categoryTitle = document.getElementById('categoryTitle');
 const visualStatus = document.getElementById('visualStatus');
 const clearVendorBtn = document.getElementById('clearVendorBtn');
+const takeAllBtn = document.getElementById('takeAllBtn');
 
 let categories = [];
 let catalog = {};
@@ -35,9 +38,26 @@ function currentItems() {
     return cat ? (catalog[cat.id] || []) : [];
 }
 
+function genderedValue(value) {
+    if (value && typeof value === 'object') {
+        return value.male || value.female || value[0] || '';
+    }
+
+    return value;
+}
+
 function hasVisual(variation) {
     const component = variation?.component || {};
-    return Boolean(component.shopItem || component.drawable);
+    return Boolean(genderedValue(component.shopItem) || genderedValue(component.drawable));
+}
+
+function setVisualStatus(text, state = '') {
+    visualStatus.textContent = text || '';
+    visualStatus.classList.remove('good', 'bad');
+
+    if (state) {
+        visualStatus.classList.add(state);
+    }
 }
 
 function renderCategories() {
@@ -92,9 +112,11 @@ function renderItems() {
 function renderDetails() {
     detailsBox.innerHTML = '';
     buyBtn.disabled = true;
+    buyNowBtn.disabled = true;
 
     if (!selectedItem) {
         detailsBox.innerHTML = '<div class="empty">Выбери предмет.</div>';
+        setVisualStatus('Выбери вещь для примерки.');
         return;
     }
 
@@ -119,15 +141,20 @@ function renderDetails() {
         detailsBox.appendChild(div);
     });
 
-    visualStatus.textContent = hasVisual(selectedVariation)
-        ? 'Превью меняет одежду на персонаже'
-        : 'Превью готово, но для этой позиции ещё не задан hash одежды';
+    setVisualStatus(
+        hasVisual(selectedVariation)
+            ? 'Примерка должна сразу отобразиться на персонаже. Если вещь не меняется, значит hash не подошёл к текущему ped/полу.'
+            : 'У этой позиции пока не задан визуальный hash.',
+        hasVisual(selectedVariation) ? 'good' : 'bad'
+    );
 
     buyBtn.disabled = !selectedVariation;
+    buyNowBtn.disabled = !selectedVariation;
 }
 
 function renderBasket() {
     basketList.innerHTML = '';
+    takeAllBtn.disabled = !basket.length;
 
     if (!basket.length) {
         basketList.innerHTML = '<div class="empty">У продавца пока ничего нет.</div>';
@@ -156,27 +183,34 @@ function renderAll() {
     renderBasket();
 }
 
-function previewSelected() {
+function selectedPayload() {
     const cat = currentCategory();
-    if (!cat || !selectedItem || !selectedVariation) return;
+    if (!cat || !selectedItem || !selectedVariation) return null;
 
-    post('preview', {
+    return {
         categoryId: cat.id,
         itemId: selectedItem.id,
         variationId: selectedVariation.id,
         component: selectedVariation.component || {}
-    });
+    };
 }
 
-function buySelected() {
-    const cat = currentCategory();
-    if (!cat || !selectedItem || !selectedVariation) return;
+function previewSelected() {
+    const payload = selectedPayload();
+    if (!payload) return;
+    post('preview', payload);
+}
 
-    post('addToVendor', {
-        categoryId: cat.id,
-        itemId: selectedItem.id,
-        variationId: selectedVariation.id
-    });
+function addSelectedToVendor() {
+    const payload = selectedPayload();
+    if (!payload) return;
+    post('addToVendor', payload);
+}
+
+function buySelectedNow() {
+    const payload = selectedPayload();
+    if (!payload) return;
+    post('buySelectedNow', payload);
 }
 
 window.addEventListener('message', (event) => {
@@ -204,11 +238,18 @@ window.addEventListener('message', (event) => {
         basket = data.basket || [];
         renderBasket();
     }
+
+    if (data.action === 'visualStatus') {
+        setVisualStatus(data.text || '', data.ok ? 'good' : 'bad');
+    }
 });
 
 closeBtn.addEventListener('click', () => post('close'));
-buyBtn.addEventListener('click', buySelected);
+buyBtn.addEventListener('click', addSelectedToVendor);
+buyNowBtn.addEventListener('click', buySelectedNow);
+revertBtn.addEventListener('click', () => post('revertPreview'));
 clearVendorBtn.addEventListener('click', () => post('clearVendor'));
+takeAllBtn.addEventListener('click', () => post('takeAllFromVendor'));
 
 document.addEventListener('keydown', (event) => {
     if (app.classList.contains('hidden')) return;
@@ -248,7 +289,15 @@ document.addEventListener('keydown', (event) => {
         previewSelected();
     }
 
+    if (event.key.toLowerCase() === 'q') {
+        post('rotatePed', { delta: -12.5 });
+    }
+
+    if (event.key.toLowerCase() === 'e') {
+        post('rotatePed', { delta: 12.5 });
+    }
+
     if (event.key === 'Enter') {
-        buySelected();
+        buySelectedNow();
     }
 });

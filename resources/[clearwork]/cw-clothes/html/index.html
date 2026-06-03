@@ -6,52 +6,62 @@
 </head>
 <body>
     <div id="app" class="hidden">
-        <div class="panel">
-            <header class="header">
+        <div class="shop-window">
+            <div class="header">
                 <div>
-                    <div class="kicker">CLEARWORK CLOTHIER</div>
+                    <div class="small-title">CLEARWORK CLOTHIER</div>
                     <h1>Лавка одежды</h1>
-                    <p>Выбери вещь, посмотри вариацию, отложи у продавца и забери в свой инвентарь.</p>
+                    <p>Примерь вещь на персонаже, отложи у продавца или сразу забери в свой инвентарь.</p>
                 </div>
-                <button id="closeBtn" class="close">×</button>
-            </header>
+                <button id="closeBtn" class="close-btn">×</button>
+            </div>
 
-            <main class="layout">
-                <aside class="categories">
+            <div class="line"></div>
+
+            <div class="content">
+                <section class="panel categories-panel">
                     <h2>Разделы</h2>
-                    <div id="categoryList" class="list"></div>
-                    <div class="hint">
-                        ← / → разделы<br>
-                        ↑ / ↓ вещи<br>
-                        Enter купить
-                    </div>
-                </aside>
+                    <div id="categoryList" class="category-list"></div>
 
-                <section class="goods">
-                    <div class="section-title">
-                        <h2 id="categoryTitle">Ассортимент</h2>
-                        <span id="visualStatus">Превью готово</span>
+                    <div class="help">
+                        <div>← / → раздел</div>
+                        <div>↑ / ↓ вещь</div>
+                        <div>Q / E вращение</div>
+                        <div>Enter купить</div>
                     </div>
+                </section>
+
+                <section class="panel items-panel">
+                    <h2 id="categoryTitle">Ассортимент</h2>
                     <div id="itemList" class="item-list"></div>
                 </section>
 
-                <section class="details">
+                <section class="panel details-panel">
                     <h2>Вариации</h2>
-                    <div id="detailsBox" class="details-box">
-                        <div class="empty">Выбери предмет.</div>
+                    <div id="detailsBox" class="details-box"></div>
+
+                    <div id="visualStatus" class="visual-status">Выбери вещь для примерки.</div>
+
+                    <div class="actions">
+                        <button id="buyNowBtn" class="primary-btn">Купить в инвентарь</button>
+                        <button id="buyBtn" class="secondary-btn">Отложить у продавца</button>
+                        <button id="revertBtn" class="ghost-btn">Вернуть мой вид</button>
                     </div>
-                    <button id="buyBtn" class="buy" disabled>Отложить у продавца</button>
                 </section>
 
-                <aside class="vendor">
-                    <div class="section-title">
+                <section class="panel vendor-panel">
+                    <div class="vendor-head">
                         <h2>У продавца</h2>
-                        <button id="clearVendorBtn">Очистить</button>
+                        <button id="clearVendorBtn" class="small-btn">Очистить</button>
                     </div>
-                    <p class="vendor-note">Этот список видишь только ты. Другие игроки не могут забрать эти вещи.</p>
-                    <div id="basketList" class="basket"></div>
-                </aside>
-            </main>
+
+                    <p class="vendor-note">Этот список видишь только ты. После покупки забирай вещи в свой инвентарь прямо отсюда.</p>
+
+                    <div id="basketList" class="basket-list"></div>
+
+                    <button id="takeAllBtn" class="take-all-btn">Забрать всё в инвентарь</button>
+                </section>
+            </div>
         </div>
     </div>
 
